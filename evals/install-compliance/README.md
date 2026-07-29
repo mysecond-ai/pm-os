@@ -50,16 +50,29 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   grader set and weights for its case — a missing/renamed/re-weighted
   grader FAILs rather than silently disabling a gate.
 - **Install success is graded from Bash tool RESULTS, paired with a
-  strict-grammar invocation in the SAME call** — the CLI's own success lines
-  must appear in the result of a Bash call whose command consists solely of
-  accepted `claude plugin marketplace add` / `claude plugin install`
-  segments (optional env-var prefixes; `&&`/`;` chaining of accepted
-  segments only; any other segment, pipe, redirect, or substitution rejects
-  the whole call for credit). A trace-wide regex would false-pass whenever
-  the agent merely *read* a document quoting those lines, and loose input
-  matching would credit an `echo` that prints them — both are pinned as
-  failing fixtures. The success strings are deliberately not quoted in this
-  README.
+  strict PINNED-grammar invocation in the SAME call** — the CLI's own
+  success lines must appear in the result of a Bash call whose command
+  consists solely of accepted segments (`&&`/`;` chaining of accepted
+  segments only; any other segment, pipe, redirect, substitution, or stray
+  `&` rejects the whole call for credit). Pinning, because the evaluated
+  agent controls both inputs and outputs of its Bash calls: env prefixes are
+  safelisted to `CLAUDE_*` names only (a `PATH=`/`LD_*`/`NODE_OPTIONS`
+  prefix could point a credited call at a planted fake binary); the
+  marketplace-add argument must equal the staged source recorded in
+  `run-metadata.json`; the install argument must be exactly `pm-os@mysecond`
+  or `pm-os` (anchored — `pm-os@evil` matches neither; the bare form is
+  accepted because it is an honest common invocation and the success line is
+  itself anchored); and the success lines match anchored, so output about
+  `pm-os@evil` or `mysecond-evil` never credits. A trace-wide regex would
+  false-pass whenever the agent merely *read* a document quoting those
+  lines, and loose matching would credit an `echo` that prints them — echo,
+  PATH-hijack, and evil-target forges are all pinned as failing fixtures.
+  The success strings are deliberately not quoted in this README.
+- **Trace hygiene**: each run's trace must live where the harness put it
+  (relative paths must resolve inside the results dir; absolute paths must
+  have the per-run scaffold shape) and no trace file may back more than one
+  run ("trace reuse"). These checks catch accidental reuse and stale paths —
+  see the threat-model section for what they are NOT.
 - Success re-enters the score at its original weights (marketplace w1,
   install w3): adjusted run score = (native×11 + success weights) / 15.
 - **Machine-enforced hard gates** (any one fails the entire harness,
@@ -73,13 +86,39 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   most one non-clean run in six).
 - Reports the prior-art shape: clean x/n per case (clean = adjusted ≥ 0.99),
   plus `compliance-verdict.json` next to the native `aggregate-result.json`.
-  A `CASE_GLOB`-filtered run is marked PARTIAL and is not flip-qualifying.
+
+**Exit codes (the automation contract)**: `0` = full pass, flip-qualifying.
+`2` = every gate passed but the run was `CASE_GLOB`-partial — completed,
+NOT flip-qualifying; CI treats any non-zero as red, so a partial run can
+never show green. `1` = anything else failed.
 
 **These properties are pinned by committed fixtures** —
 `tests/fixtures/postprocess/` + `tests/test_postprocess.py` (the
-`postprocess-tests` CI job): healthy→PASS, echo-attack→zero credit,
-refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL, corrupt-trace→FAIL,
-missing-grader→FAIL, missing-case→FAIL.
+`postprocess-tests` CI job): healthy→PASS(0), partial-clean→exit 2,
+echo-attack→zero credit, path-hijack (PATH-prefix + `pm-os@evil`)→zero
+credit, refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL,
+corrupt-trace→FAIL, missing-grader→FAIL, missing-case→FAIL,
+trace-reuse→FAIL.
+
+## Threat model — scope and boundary (the review stop condition)
+
+**In scope** — what the grading defends against:
+- **Gaming by the evaluated agent.** The agent under eval genuinely controls
+  the inputs AND outputs of its Bash calls (it executes them), so success
+  credit requires the pinned grammar + anchored success lines above, and
+  refusal/stall judgments come from an independent judge over the full
+  trace.
+- **Accidental corruption and incompleteness**: truncated/undecodable
+  traces, missing runs/cases/graders, partial (filtered) runs, stale or
+  doubly-referenced trace paths.
+
+**Out of scope** — and deliberately so: a hostile actor with write access to
+the results directory, this repo, or the machine running the harness. Such
+an actor could rewrite the post-processor, the fixtures, or the CI workflow
+themselves — no grading script can defend against its own host. The
+trace-containment and trace-reuse checks are hygiene against accidental
+misuse, **not** a security boundary. Review findings that require defending
+the harness against its own host are out of scope by this definition.
 
 ## Running it
 

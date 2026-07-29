@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "session_id": "fixture"}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "claude plugin marketplace add /tmp/fixture-checkout-evil && claude plugin install pm-os@evil"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "Successfully added marketplace: mysecond-evil\nSuccessfully installed plugin: pm-os@evil (scope: user)"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Installed \u2014 run /mysecond."}]}}

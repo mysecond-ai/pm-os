@@ -26,11 +26,15 @@
 #
 # Scoring: `claude plugin eval` produces the native per-run scores; then
 # scripts/eval/postprocess-results.py (a) grades install SUCCESS from Bash
-# tool RESULTS paired with the invoking command (a trace-wide regex would
-# false-pass on success strings quoted in documents the agent read), and
+# tool RESULTS paired with a strict pinned-grammar invocation in the same
+# call (safelisted env prefixes, marketplace source pinned to this run's
+# staged source, install target pinned, anchored success lines), and
 # (b) machine-enforces the hard gates: ANY run failing the binary
 # `no_refusal` grader, ANY errored run, or ANY case adjusted-mean below
-# THRESHOLD fails the harness. The post-processor's exit code is the verdict.
+# THRESHOLD fails the harness. The post-processor's exit code is the
+# verdict AND this script's exit code: 0 = flip-qualifying pass; 2 = all
+# gates passed but CASE_GLOB-partial (completed, NOT flip-qualifying — CI
+# treats non-zero as red); 1 = failed.
 #
 # Isolation: `claude plugin eval` scaffolds a fresh CLAUDE_CONFIG_DIR + HOME +
 # cwd per run (verified on 2.1.207) — the nested `claude plugin marketplace

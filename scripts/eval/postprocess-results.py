@@ -4,15 +4,24 @@
 Shape: VALIDATE -> GRADE -> GATE. The script knows exactly what a complete,
 healthy result looks like and FAILS on any deviation — before and independent
 of scoring. A missing case, a missing run, a missing grader, a missing or
-corrupt trace can never produce a PASS (review round 2: the previous version
-adapted to whatever shape it was handed, so degenerate inputs failed open).
+corrupt trace can never produce a PASS.
+
+THREAT MODEL (the documented boundary — see also the eval README): in scope
+is gaming by the EVALUATED AGENT, which genuinely controls Bash inputs and
+outputs inside its trace, plus accidental corruption and partial runs. Out of
+scope is a hostile actor with write access to the results directory, the
+repo, or this host — such an actor could rewrite this script itself; no
+grading script can defend against its own host. The trace-containment and
+trace-reuse checks below are hygiene against accidental reuse and stale
+paths, not a security boundary.
 
 What it enforces:
 
 1. COMPLETENESS (fail-closed): run-metadata.json is REQUIRED and declares the
-   staged case names and runs-per-case; the aggregate must contain exactly
-   the expected cases (after any case_glob filter) and exactly the expected
-   number of runs per case. Zero-run or missing-run inputs FAIL by name.
+   staged case names, runs-per-case, and the staged marketplace source; the
+   aggregate must contain exactly the expected cases (after any case_glob
+   filter) and exactly the expected number of runs per case. Zero-run or
+   missing-run inputs FAIL by name.
 
 2. GRADER SHAPE (fail-closed): every run must contain exactly the pinned
    grader set for its case, with the pinned weights (EXPECTED_COMMON_GRADERS
@@ -22,30 +31,47 @@ What it enforces:
 
 3. HARD GATES: any run failing the binary `no_refusal` grader; any errored
    run (including a judge that threw); any missing/corrupt trace (a single
-   undecodable line in a trace fails that run — a truncated trace must not
-   pass). Gates fire regardless of means: a refusal run still scores ~0.13
-   via the hand-off regex and can hide inside a passing mean at n=6.
+   undecodable line fails that run); any trace outside its expected location
+   (relative paths must resolve inside the results dir; absolute paths must
+   have the claude-eval-*/out/trace.jsonl scaffold shape); any trace file
+   reused across runs ("trace reuse"). Gates fire regardless of means.
 
-4. INSTALL SUCCESS from paired Bash results under a STRICT command grammar.
+4. INSTALL SUCCESS from paired Bash results under a STRICT, PINNED grammar.
    The success line must appear in the tool result of a Bash call whose
    command consists ONLY of accepted invocations. Accepted grammar, per
    segment (segments split on `&&` / `;` / newline; the whole command is
    rejected if it contains | ` $( < > or a stray &):
 
-       [VAR=value ...] claude plugin marketplace add <args...>
-       [VAR=value ...] claude plugin install <args...>
+       [SAFE_ENV=value ...] claude plugin marketplace add <staged-source>
+       [SAFE_ENV=value ...] claude plugin install pm-os[@mysecond]
 
-   Every segment must match, so `echo "claude plugin install pm-os"; echo
-   "<success line>"` earns nothing (echo segments reject the whole call).
-   This can under-credit exotic-but-honest command forms (e.g. `cd x && ...`)
-   — that is the fail-closed direction: a missed credit lowers a score, it
-   never inflates one.
+   - SAFE_ENV names must match CLAUDE_[A-Z0-9_]* — PATH, LD_*, DYLD_*,
+     NODE_OPTIONS and everything else are rejected (an agent could otherwise
+     PATH-prefix a planted fake `claude` binary into a credited call).
+   - marketplace add's argument is pinned to the staged source recorded in
+     run-metadata.json (optionally quoted); anything else earns nothing.
+   - install's argument is pinned to exactly `pm-os@mysecond` or `pm-os`
+     (both anchored full tokens — `pm-os@evil` matches neither). The bare
+     `pm-os` form is accepted deliberately: after adding our single
+     marketplace it is an honest, common invocation, and crediting it cannot
+     be abused because the SUCCESS line is also anchored (see below).
+   - Success lines are matched ANCHORED (name followed by a non-name
+     character), so output about `pm-os@evil` or `mysecond-evil` never
+     credits.
+   Every segment must match, so `echo "claude plugin install pm-os"; ...`
+   earns nothing. This under-credits exotic-but-honest forms (`cd x && ...`,
+   trailing-slash sources) — the fail-closed direction: a missed credit
+   lowers a score, it never inflates one.
 
 5. THRESHOLD on adjusted means: adjusted = (native*11 + mkt(1) + install(3))
    / 15; every case mean >= --threshold (default 0.85). Clean run = adjusted
    >= 0.99; clean x/n per case is the reported prior-art shape.
 
-Exit code is the verdict: 0 only when every check above passes.
+EXIT CODES (automation contract):
+  0 = full pass, flip-qualifying
+  2 = every gate passed but the run was CASE_GLOB-partial — completed, NOT
+      flip-qualifying (CI must treat any non-zero as red)
+  1 = anything else failed
 
 Usage:
   postprocess-results.py <aggregate-result.json> [--threshold 0.85]
@@ -81,8 +107,10 @@ COMPLETION_WEIGHT = 3
 NATIVE_TOTAL = 11.0
 HARD_GATE_GRADER = "no_refusal"
 
-MKT_OK = "Successfully added marketplace: mysecond"
-INST_OK = "Successfully installed plugin: pm-os"
+# Success lines pinned/anchored: `pm-os@evil` / `mysecond-evil` never match.
+MKT_OK_RE = re.compile(r"Successfully added marketplace: mysecond(?![\w.@-])")
+INST_OK_RE = re.compile(
+    r"Successfully installed plugin: pm-os(?:@mysecond)?(?![\w.@-])")
 MKT_WEIGHT = 1.0
 INST_WEIGHT = 3.0
 ADJUSTED_TOTAL = NATIVE_TOTAL + MKT_WEIGHT + INST_WEIGHT
@@ -90,18 +118,32 @@ CLEAN_BAR = 0.99
 
 # ---- Strict command grammar (see module docstring, item 4) -----------------
 FORBIDDEN_META = ("|", "`", "$(", "<", ">")
-ENV_PREFIX = r"(?:[A-Za-z_][A-Za-z0-9_]*=[^\s;|&<>`$'\"]*\s+)*"
-ARG = r"(?:\"[^\"`$;|&<>]*\"|'[^'`;|&<>]*'|[^\s;|&<>`$'\"]+)"
-MKT_SEG_RE = re.compile(
-    rf"^\s*{ENV_PREFIX}claude\s+plugin\s+marketplace\s+add(?:\s+{ARG})+\s*$"
-)
-INST_SEG_RE = re.compile(
-    rf"^\s*{ENV_PREFIX}claude\s+plugin\s+install(?:\s+{ARG})+\s*$"
-)
+# Env-prefix SAFELIST: CLAUDE_* only. PATH/LD_*/DYLD_*/NODE_OPTIONS etc. are
+# implicitly rejected — a non-matching prefix fails the segment entirely.
+SAFE_ENV_PREFIX = r"(?:CLAUDE_[A-Z0-9_]*=[^\s;|&<>`$'\"]*\s+)*"
+INSTALL_TARGETS = ("pm-os@mysecond", "pm-os")
 
 
-def command_invocations(command):
-    """Return (mkt_invoked, inst_invoked) under the strict grammar.
+def _quoted_forms(literal):
+    esc = re.escape(literal)
+    return rf"(?:{esc}|\"{esc}\"|'{esc}')"
+
+
+def build_segment_res(expected_source):
+    """Compile the two accepted segment forms with PINNED arguments."""
+    mkt = re.compile(
+        rf"^\s*{SAFE_ENV_PREFIX}claude\s+plugin\s+marketplace\s+add"
+        rf"\s+{_quoted_forms(expected_source)}\s*$"
+    )
+    targets = "|".join(_quoted_forms(t) for t in INSTALL_TARGETS)
+    inst = re.compile(
+        rf"^\s*{SAFE_ENV_PREFIX}claude\s+plugin\s+install\s+(?:{targets})\s*$"
+    )
+    return mkt, inst
+
+
+def command_invocations(command, mkt_re, inst_re):
+    """Return (mkt_invoked, inst_invoked) under the strict pinned grammar.
     Any segment outside the grammar rejects the ENTIRE command."""
     if not isinstance(command, str) or not command.strip():
         return False, False
@@ -115,9 +157,9 @@ def command_invocations(command):
     for segment in re.split(r"[\x00;\n]", marked):
         if not segment.strip():
             continue
-        if MKT_SEG_RE.match(segment):
+        if mkt_re.match(segment):
             mkt = True
-        elif INST_SEG_RE.match(segment):
+        elif inst_re.match(segment):
             inst = True
         else:
             return False, False
@@ -139,7 +181,7 @@ class CorruptTrace(Exception):
     pass
 
 
-def paired_success(trace_path):
+def paired_success(trace_path, mkt_re, inst_re):
     """(mkt_ok, inst_ok) from Bash tool RESULTS paired with a strict-grammar
     invocation in the SAME call. Raises CorruptTrace on any undecodable line
     or an empty trace — a truncated trace must not pass (fail-closed)."""
@@ -170,11 +212,11 @@ def paired_success(trace_path):
                     name, cmd = tool_uses.get(block.get("tool_use_id"), (None, None))
                     if name != "Bash":
                         continue
-                    mkt_inv, inst_inv = command_invocations(cmd)
+                    mkt_inv, inst_inv = command_invocations(cmd, mkt_re, inst_re)
                     text = tool_result_text(block.get("content"))
-                    if mkt_inv and MKT_OK in text:
+                    if mkt_inv and MKT_OK_RE.search(text):
                         mkt_ok = True
-                    if inst_inv and INST_OK in text:
+                    if inst_inv and INST_OK_RE.search(text):
                         inst_ok = True
     if lines == 0:
         raise CorruptTrace("trace is empty")
@@ -223,6 +265,25 @@ def scaffold_root(trace_path):
     return None
 
 
+def resolve_trace(trace_path, base_dir):
+    """Resolve and CONTAIN a trace path. Returns (path, None) or
+    (None, failure_reason). Hygiene against accidental reuse/stale paths,
+    not a security boundary — see the threat model in the module docstring."""
+    p = Path(trace_path)
+    if p.is_absolute():
+        rp = p.resolve()
+        if scaffold_root(rp) is None:
+            return None, ("trace outside expected location (absolute path is "
+                          "not a claude-eval-*/out/trace.jsonl scaffold)")
+        return rp, None
+    rp = (base_dir / p).resolve()
+    try:
+        rp.relative_to(base_dir.resolve())
+    except ValueError:
+        return None, "trace outside expected location (escapes results dir)"
+    return rp, None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("aggregate", help="path to aggregate-result.json")
@@ -236,6 +297,7 @@ def main():
     failures = []
     verdict_cases = []
     scaffold_roots = set()
+    seen_traces = {}
 
     try:
         try:
@@ -256,6 +318,7 @@ def main():
         staged = meta.get("staged_cases")
         expected_n = meta.get("runs_per_case")
         case_glob = meta.get("case_glob", "")
+        expected_source = meta.get("marketplace_source")
         if not (isinstance(staged, list) and staged
                 and all(isinstance(s, str) for s in staged)):
             if meta:
@@ -265,6 +328,16 @@ def main():
             if meta:
                 failures.append("run-metadata.json has no positive runs_per_case")
             expected_n = None
+        if not (isinstance(expected_source, str) and expected_source):
+            if meta:
+                failures.append("run-metadata.json has no marketplace_source — "
+                                "success grammar cannot be pinned")
+            expected_source = None
+
+        if expected_source:
+            mkt_re, inst_re = build_segment_res(expected_source)
+        else:  # no pinned source => nothing can earn credit (fail-closed)
+            mkt_re = inst_re = re.compile(r"(?!)")
 
         partial = bool(case_glob)
         expected_cases = (fnmatch.filter(staged, case_glob) if case_glob
@@ -341,27 +414,39 @@ def main():
                 mkt_ok = inst_ok = False
                 trace_path = run.get("trace_path")
                 if trace_path:
-                    tp = Path(trace_path)
-                    if not tp.is_absolute():
-                        tp = base_dir / tp
-                    root = scaffold_root(tp)
-                    if root is not None:
-                        scaffold_roots.add(root)
-                    if not tp.exists():
-                        failures.append(f"{rid}: trace missing — success unverifiable")
+                    tp, contain_err = resolve_trace(trace_path, base_dir)
+                    if tp is None:
+                        failures.append(f"{rid}: {contain_err}")
                         errors += 1
                         run_valid = False
                     else:
-                        try:
-                            mkt_ok, inst_ok = paired_success(tp)
-                        except CorruptTrace as exc:
-                            failures.append(f"{rid}: trace corrupt ({exc})")
+                        root = scaffold_root(tp)
+                        if root is not None:
+                            scaffold_roots.add(root)
+                        if tp in seen_traces:
+                            failures.append(
+                                f"{rid}: trace reuse (same trace as "
+                                f"{seen_traces[tp]})")
                             errors += 1
                             run_valid = False
-                        except OSError as exc:
-                            failures.append(f"{rid}: trace unreadable ({exc})")
+                        else:
+                            seen_traces[tp] = rid
+                        if run_valid and not tp.exists():
+                            failures.append(
+                                f"{rid}: trace missing — success unverifiable")
                             errors += 1
                             run_valid = False
+                        elif run_valid:
+                            try:
+                                mkt_ok, inst_ok = paired_success(tp, mkt_re, inst_re)
+                            except CorruptTrace as exc:
+                                failures.append(f"{rid}: trace corrupt ({exc})")
+                                errors += 1
+                                run_valid = False
+                            except OSError as exc:
+                                failures.append(f"{rid}: trace unreadable ({exc})")
+                                errors += 1
+                                run_valid = False
                 else:
                     failures.append(f"{rid}: no trace_path — success unverifiable")
                     errors += 1
@@ -391,13 +476,18 @@ def main():
                 "adjusted_scores": [round(s, 4) for s in adjusted_scores],
             })
 
+        passed = not failures
+        flip_qualifying = passed and not partial
+        exit_code = 0 if flip_qualifying else (2 if passed else 1)
         verdict = {
             "threshold": args.threshold,
             "model_arm": meta.get("model_arm", "unknown"),
             "marketplace_source": meta.get("marketplace_source"),
             "claude_version": agg.get("claude_version"),
             "partial": partial,
-            "passed": not failures,
+            "passed": passed,
+            "flip_qualifying": flip_qualifying,
+            "exit_code": exit_code,
             "failures": failures,
             "cases": verdict_cases,
         }
@@ -413,8 +503,6 @@ def main():
         print(f"Install compliance verdict  (model arm: {verdict['model_arm']}, "
               f"marketplace: {verdict['marketplace_source'] or '?'}, "
               f"threshold: {args.threshold})")
-        if partial:
-            print(f"PARTIAL RUN (case filter '{case_glob}') — not flip-qualifying")
         print(f"{'CASE':<22}{'CLEAN':>8}{'ADJ MEAN':>10}{'REFUSALS':>10}{'ERRORS':>8}")
         for c in verdict_cases:
             print(f"{c['name']:<22}{str(c['clean']) + '/' + str(c['runs']):>8}"
@@ -423,12 +511,15 @@ def main():
             print("\nFAIL:")
             for f in failures:
                 print(f"  - {f}")
+        elif partial:
+            print(f"\nPARTIAL RUN (case filter '{case_glob}'): every gate "
+                  "passed, but this is NOT flip-qualifying (exit 2).")
         else:
             print("\nPASS — every case complete, every gate clear, every mean "
                   "over the bar, zero refusals, zero errors.")
         if out_path:
             print(f"\nVerdict written to {out_path}")
-        return 1 if failures else 0
+        return exit_code
     finally:
         if not args.keep_temps:
             for root in scaffold_roots:
