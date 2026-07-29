@@ -14,11 +14,19 @@
 #   4. .claude-plugin/plugin.json must NOT contain a "version" key —
 #      version lives in marketplace.json ONLY (a plugin.json version
 #      silently takes precedence and breaks release discipline).
-#   5. Every @mysecond/cli@<version> reference (plugin.json hooks, README)
-#      must equal the pinned version in .cli-pin — the hooks' npx fallback
-#      is PINNED, never @latest (supply-chain: an unpinned fallback means
-#      trusting the npm account continuously; agents inspecting the plugin
-#      flagged exactly this). Bump with scripts/set-cli-pin.sh <version>.
+#   5. REPO-WIDE: every @mysecond/cli@<ref> occurrence in tracked files must
+#      equal the pinned version in .cli-pin — @latest (or any other version)
+#      anywhere is a violation. The hooks' npx fallback is PINNED, never
+#      @latest (supply-chain: an unpinned fallback means trusting the npm
+#      account continuously; agents inspecting the plugin flagged exactly
+#      this). Bump with scripts/set-cli-pin.sh <version>.
+#      Documented exemptions (and the ONLY ones):
+#        - tests/fixtures/** — frozen historical bytes: real agent traces
+#          recorded against the pre-pin plugin genuinely contain @latest;
+#          rewriting recorded reality would falsify the fixtures.
+#        - scripts/check-allowlist.sh, scripts/set-cli-pin.sh — the
+#          enforcement tooling itself must be able to name the forbidden
+#          string.
 #
 # Runs on tracked files (git ls-files) so it checks exactly what ships.
 
@@ -81,26 +89,30 @@ else
   fail=1
 fi
 
-# Rule 5: CLI version pin consistency (single source: .cli-pin).
+# Rule 5: repo-wide CLI version pin consistency (single source: .cli-pin).
+# Scope: EVERY tracked file except the documented exemptions in the header.
 if [ -f .cli-pin ]; then
   PIN="$(tr -d '[:space:]' < .cli-pin)"
   if [ -z "$PIN" ]; then
     echo "ALLOWLIST VIOLATION (rule 5): .cli-pin is empty" >&2
     fail=1
   fi
-  while IFS= read -r ref; do
-    ver="${ref#@mysecond/cli@}"
-    if [ "$ver" != "$PIN" ]; then
-      echo "ALLOWLIST VIOLATION (rule 5): found @mysecond/cli@$ver but .cli-pin says $PIN (use scripts/set-cli-pin.sh)" >&2
-      fail=1
-    fi
-  done < <(git ls-files -z '*.json' '*.md' | xargs -0 grep -ho '@mysecond/cli@[0-9][0-9A-Za-z.-]*' 2>/dev/null | sort -u)
+  while IFS= read -r f; do
+    case "$f" in
+      tests/fixtures/*) continue ;;                      # frozen historical bytes
+      scripts/check-allowlist.sh|scripts/set-cli-pin.sh) continue ;;  # enforcement tooling
+    esac
+    while IFS= read -r ref; do
+      [ -z "$ref" ] && continue
+      ver="${ref#@mysecond/cli@}"
+      if [ "$ver" != "$PIN" ]; then
+        echo "ALLOWLIST VIOLATION (rule 5): $f references @mysecond/cli@$ver but .cli-pin says $PIN (use scripts/set-cli-pin.sh)" >&2
+        fail=1
+      fi
+    done < <(grep -ho '@mysecond/cli@[0-9A-Za-z][0-9A-Za-z.-]*' "$f" 2>/dev/null | sort -u)
+  done < <(git ls-files)
   if ! grep -q "@mysecond/cli@$PIN" .claude-plugin/plugin.json; then
     echo "ALLOWLIST VIOLATION (rule 5): plugin.json has no @mysecond/cli@$PIN fallback — hooks must pin the CLI" >&2
-    fail=1
-  fi
-  if grep -q '@mysecond/cli@latest' .claude-plugin/plugin.json README.md 2>/dev/null; then
-    echo "ALLOWLIST VIOLATION (rule 5): @mysecond/cli@latest found — the fallback must be pinned" >&2
     fail=1
   fi
 else
