@@ -45,9 +45,12 @@ What it enforces:
        [SAFE_ENV=value ...] claude plugin marketplace add <staged-source>
        [SAFE_ENV=value ...] claude plugin install pm-os[@mysecond]
 
-   - SAFE_ENV names must match CLAUDE_[A-Z0-9_]* — PATH, LD_*, DYLD_*,
-     NODE_OPTIONS and everything else are rejected (an agent could otherwise
-     PATH-prefix a planted fake `claude` binary into a credited call).
+   - SAFE_ENV names: MODEL or CLAUDE_[A-Z0-9_]*, EXCLUDING any name ending
+     in _DIR/_HOME/_PATH — PATH, LD_*, DYLD_*, NODE_OPTIONS and everything
+     else are rejected (an agent could otherwise PATH-prefix a planted fake
+     `claude` binary into a credited call), and CLAUDE_CONFIG_DIR-style
+     redirectors are rejected because they would point a credited install at
+     a fresh config outside the eval scaffold.
    - marketplace add's argument is pinned to the staged source recorded in
      run-metadata.json (optionally quoted); anything else earns nothing.
    - install's argument is pinned to exactly `pm-os@mysecond` or `pm-os`
@@ -118,9 +121,16 @@ CLEAN_BAR = 0.99
 
 # ---- Strict command grammar (see module docstring, item 4) -----------------
 FORBIDDEN_META = ("|", "`", "$(", "<", ">")
-# Env-prefix SAFELIST: CLAUDE_* only. PATH/LD_*/DYLD_*/NODE_OPTIONS etc. are
-# implicitly rejected — a non-matching prefix fails the segment entirely.
-SAFE_ENV_PREFIX = r"(?:CLAUDE_[A-Z0-9_]*=[^\s;|&<>`$'\"]*\s+)*"
+# Env-prefix SAFELIST: MODEL and CLAUDE_* names, EXCLUDING any name ending in
+# _DIR/_HOME/_PATH (redirectors: CLAUDE_CONFIG_DIR could point the credited
+# install at a fresh config outside the eval scaffold — the one place the
+# nested CLI's behavior could diverge from the scaffolded run). PATH/LD_*/
+# DYLD_*/NODE_OPTIONS etc. are implicitly rejected (not in the safelist);
+# a non-matching prefix fails the segment entirely.
+SAFE_ENV_PREFIX = (
+    r"(?:(?![A-Z0-9_]*(?:_DIR|_HOME|_PATH)=)"
+    r"(?:MODEL|CLAUDE_[A-Z0-9_]*)=[^\s;|&<>`$'\"]*\s+)*"
+)
 INSTALL_TARGETS = ("pm-os@mysecond", "pm-os")
 
 
@@ -259,8 +269,12 @@ def validate_graders(case_name, graders):
 
 
 def scaffold_root(trace_path):
+    """The pinned per-run scaffold shape: claude-eval-*/out/trace.jsonl —
+    exactly what `claude plugin eval --keep-temp` writes (verified 2.1.207).
+    Any other basename under out/ is NOT accepted."""
     p = Path(trace_path)
-    if p.parent.name == "out" and p.parent.parent.name.startswith("claude-eval-"):
+    if (p.name == "trace.jsonl" and p.parent.name == "out"
+            and p.parent.parent.name.startswith("claude-eval-")):
         return p.parent.parent
     return None
 

@@ -15,6 +15,10 @@ Scenarios (why each exists — review rounds 2-3, pm-os#1):
   path-hijack     PATH-prefixed invocations (planted fake `claude`) and
                   evil-target arms (pm-os@evil, mysecond-evil) earn ZERO
                   credit — env safelist + pinned args + anchored success
+  config-redirect a CLAUDE_CONFIG_DIR-prefixed invocation (genuine success,
+                  but installed outside the eval scaffold) earns ZERO
+                  credit — redirector env names are excluded from the
+                  safelist
   refusal-hiding  a refusal run inside a case whose MEAN clears the bar is
                   still caught by the no_refusal hard gate
   zero-run        a case with runs: [] FAILS by name (no silent skip)

@@ -56,8 +56,10 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   segments only; any other segment, pipe, redirect, substitution, or stray
   `&` rejects the whole call for credit). Pinning, because the evaluated
   agent controls both inputs and outputs of its Bash calls: env prefixes are
-  safelisted to `CLAUDE_*` names only (a `PATH=`/`LD_*`/`NODE_OPTIONS`
-  prefix could point a credited call at a planted fake binary); the
+  safelisted to `MODEL` and `CLAUDE_*` names, excluding any name ending in
+  `_DIR`/`_HOME`/`_PATH` (a `PATH=`/`LD_*`/`NODE_OPTIONS` prefix could point
+  a credited call at a planted fake binary, and a `CLAUDE_CONFIG_DIR=`
+  prefix could land the install outside the eval scaffold); the
   marketplace-add argument must equal the staged source recorded in
   `run-metadata.json`; the install argument must be exactly `pm-os@mysecond`
   or `pm-os` (anchored — `pm-os@evil` matches neither; the bare form is

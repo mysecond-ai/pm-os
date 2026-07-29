@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "paste-exact: adjusted mean 0.733 < threshold 0.85"
+  ]
+}
