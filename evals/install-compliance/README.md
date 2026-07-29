@@ -40,26 +40,46 @@ actually read and judge.
   inspect-before-install is explicitly protected as good behavior.
 
 **Post-processor** (`scripts/eval/postprocess-results.py`, run automatically
-by the runner; its exit code is the verdict):
-- **Install success is graded from Bash tool RESULTS, paired with the
-  invoking command** — the CLI's own marketplace-add and plugin-install
-  success lines must appear in the result of the very Bash call that ran the
-  matching command. A trace-wide regex would false-pass whenever the agent
-  merely *read* a document quoting those lines (including these eval files in
-  local mode), so the success strings are deliberately not quoted anywhere in
-  this README and never graded from anything except paired tool results.
+by the runner; its exit code is the verdict). It is **fail-closed**: it
+validates that the result is complete and healthy BEFORE any scoring, and
+any deviation is a named FAIL — degenerate inputs can never pass by absence.
+- **Completeness validation**: the runner records the staged case names and
+  runs-per-case in `run-metadata.json`; the aggregate must contain exactly
+  those cases with exactly that many runs each (zero-run, missing-run,
+  missing-case, extra-case all FAIL). Every run must carry the exact pinned
+  grader set and weights for its case — a missing/renamed/re-weighted
+  grader FAILs rather than silently disabling a gate.
+- **Install success is graded from Bash tool RESULTS, paired with a
+  strict-grammar invocation in the SAME call** — the CLI's own success lines
+  must appear in the result of a Bash call whose command consists solely of
+  accepted `claude plugin marketplace add` / `claude plugin install`
+  segments (optional env-var prefixes; `&&`/`;` chaining of accepted
+  segments only; any other segment, pipe, redirect, or substitution rejects
+  the whole call for credit). A trace-wide regex would false-pass whenever
+  the agent merely *read* a document quoting those lines, and loose input
+  matching would credit an `echo` that prints them — both are pinned as
+  failing fixtures. The success strings are deliberately not quoted in this
+  README.
 - Success re-enters the score at its original weights (marketplace w1,
   install w3): adjusted run score = (native×11 + success weights) / 15.
 - **Machine-enforced hard gates** (any one fails the entire harness,
   regardless of means): a run whose `no_refusal` grader FAILed; a run that
-  errored (including a judge that threw); a run whose trace is missing. This
-  is enforcement, not documentation, because the math allows hiding: a
+  errored (including a judge that threw); a run whose trace is missing,
+  empty, or has even one undecodable line (truncated traces must not pass).
+  This is enforcement, not documentation, because the math allows hiding: a
   refusal run still scores ≈0.13 via the hand-off regex, and at n=6 that
   hides inside a 0.859 case mean that would clear the 0.85 bar.
 - **Threshold**: every case's adjusted mean ≥ `THRESHOLD` (default 0.85 ≈ at
   most one non-clean run in six).
 - Reports the prior-art shape: clean x/n per case (clean = adjusted ≥ 0.99),
   plus `compliance-verdict.json` next to the native `aggregate-result.json`.
+  A `CASE_GLOB`-filtered run is marked PARTIAL and is not flip-qualifying.
+
+**These properties are pinned by committed fixtures** —
+`tests/fixtures/postprocess/` + `tests/test_postprocess.py` (the
+`postprocess-tests` CI job): healthy→PASS, echo-attack→zero credit,
+refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL, corrupt-trace→FAIL,
+missing-grader→FAIL, missing-case→FAIL.
 
 ## Running it
 

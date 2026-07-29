@@ -103,14 +103,24 @@ fi
 RESULTS_DIR="$REPO_ROOT/evals/results/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RESULTS_DIR"
 
-# Record the arm so a verdict is never ambiguous about what it measured.
-python3 - "$RESULTS_DIR/run-metadata.json" <<PYEOF
-import json, subprocess, sys
+# Record the arm AND the completeness contract (staged case names + runs per
+# case) — the post-processor validates the aggregate against this metadata
+# fail-closed: a missing case or missing run can never pass.
+STAGED_CASES="$(find "$WORK/evals" -name case.yaml -exec perl -ne 'print "$1\n" if /^name:\s*"?([\w-]+)"?\s*$/' {} + | sort | paste -sd, -)"
+if [ -z "$STAGED_CASES" ]; then
+  echo "ERROR: no case names found in staged evals — refusing to run" >&2
+  exit 2
+fi
+export META_MODEL="${MODEL:-cli-default}" META_RUNS="$RUNS" META_THRESHOLD="$THRESHOLD" META_CASES="$STAGED_CASES" META_CASE_GLOB="$CASE_GLOB"
+python3 - "$RESULTS_DIR/run-metadata.json" <<'PYEOF'
+import json, os, subprocess, sys
 meta = {
-    "model_arm": "${MODEL:-cli-default}",
-    "marketplace_source": "$MARKETPLACE_SOURCE",
-    "runs_per_case": "$RUNS",
-    "threshold": "$THRESHOLD",
+    "model_arm": os.environ["META_MODEL"],
+    "marketplace_source": os.environ["MARKETPLACE_SOURCE"],
+    "runs_per_case": int(os.environ["META_RUNS"]),
+    "threshold": os.environ["META_THRESHOLD"],
+    "staged_cases": os.environ["META_CASES"].split(","),
+    "case_glob": os.environ["META_CASE_GLOB"],
     "claude_version": subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.strip(),
 }
 with open(sys.argv[1], "w") as fh:

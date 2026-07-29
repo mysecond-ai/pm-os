@@ -35,6 +35,17 @@ jobs:
       - name: Scan full git history
         run: /tmp/gitleaks detect --source . --redact --no-banner
 
+  # Pins the fail-closed properties of the install-compliance post-processor
+  # against committed fixtures (tests/fixtures/postprocess/): echo-attack
+  # earns zero credit, a refusal cannot hide inside a passing mean, zero-run /
+  # corrupt-trace / missing-grader / missing-case all FAIL, healthy PASSes.
+  postprocess-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail-closed post-processor fixture tests
+        run: python3 tests/test_postprocess.py
+
   # Manifest validation + token-cost check via the real Claude Code CLI.
   plugin-validate:
     runs-on: ubuntu-latest
