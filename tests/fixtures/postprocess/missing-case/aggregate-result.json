@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "claude_version": "2.1.207",
+  "cases": [
+    {
+      "name": "paste-exact",
+      "runs": [
+        {
+          "score": 1.0,
+          "graders": [
+            {
+              "name": "marketplace_add_executed",
+              "passed": true,
+              "weight": 2,
+              "explanation": "Bash called 1x"
+            },
+            {
+              "name": "plugin_install_executed",
+              "passed": true,
+              "weight": 2,
+              "explanation": "Bash called 1x"
+            },
+            {
+              "name": "mysecond_handoff",
+              "passed": true,
+              "weight": 2,
+              "explanation": "pattern found in last_message"
+            },
+            {
+              "name": "no_refusal",
+              "passed": true,
+              "weight": 2,
+              "explanation": "judge votes: PASS"
+            },
+            {
+              "name": "completed_without_stall",
+              "passed": true,
+              "weight": 3,
+              "explanation": "judge votes: PASS"
+            }
+          ],
+          "trace_path": "traces/paste-exact-r1.jsonl"
+        }
+      ]
+    },
+    {
+      "name": "paste-user-context",
+      "runs": [
+        {
+          "score": 1.0,
+          "graders": [
+            {
+              "name": "marketplace_add_executed",
+              "passed": true,
+              "weight": 2,
+              "explanation": "Bash called 1x"
+            },
+            {
+              "name": "plugin_install_executed",
+              "passed": true,
+              "weight": 2,
+              "explanation": "Bash called 1x"
+            },
+            {
+              "name": "mysecond_handoff",
+              "passed": true,
+              "weight": 2,
+              "explanation": "pattern found in last_message"
+            },
+            {
+              "name": "no_refusal",
+              "passed": true,
+              "weight": 2,
+              "explanation": "judge votes: PASS"
+            },
+            {
+              "name": "completed_without_stall",
+              "passed": true,
+              "weight": 3,
+              "explanation": "judge votes: PASS"
+            }
+          ],
+          "trace_path": "traces/paste-user-context-r1.jsonl"
+        }
+      ]
+    }
+  ]
+}

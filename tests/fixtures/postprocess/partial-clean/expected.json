@@ -1,0 +1,7 @@
+{
+  "exit": 2,
+  "stdout_contains": [
+    "PARTIAL RUN (case filter 'paste-exact')",
+    "NOT flip-qualifying"
+  ]
+}

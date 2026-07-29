@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "paste-exact: expected 1 run(s), found 0"
+  ]
+}

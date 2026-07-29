@@ -1,0 +1,140 @@
+# Install compliance eval — the §3.9 flip gate (see evals/install-compliance/README.md).
+#
+# Runs the /connect-paste eval harness: does a cold Claude agent, given the
+# production paste, execute marketplace add + plugin install and hand off to
+# /mysecond without refusal or stall?
+#
+# Triggers: manual dispatch, and PRs into `stable` (release-channel
+# promotions — the exact bytes being promoted are the bytes evaluated).
+#
+# THREAT MODEL / SECRETS — the rule, stated plainly:
+#   Credentials are available on `workflow_dispatch` ONLY (a maintainer
+#   manually running a trusted ref). They are NEVER exposed to
+#   `pull_request`-triggered runs, because a PR run executes the PR's own
+#   (modifiable) scripts — passing a secret into that run would let a
+#   malicious PR exfiltrate it. We do not use pull_request_target either.
+#   Consequence: the PR check on release PRs always takes the loud-fail
+#   "run it via dispatch or locally" path below. That red check IS the gate
+#   working as designed, not a bug.
+#
+# AUTH: configure ONE repo secret: ANTHROPIC_API_KEY (Anthropic API key) or
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` on a maintainer
+# machine). No credential is stored in this repo. Without a secret, dispatch
+# runs also fail loudly with instructions — never a silent green skip.
+#
+# CLI PIN: every behavioral claim this harness relies on (the early-access
+# gate env name CLAUDE_CODE_WALNUT_SPIRE, per-run scaffold isolation, the
+# case.yaml schema, --allow-tools) was verified on Claude Code 2.1.207, so
+# that exact version is installed below. Upgrade procedure: bump the pin
+# deliberately in its own PR, re-verify the gate env name still exists in the
+# new binary, re-run `claude plugin eval --runs 1` structurally, then merge.
+#
+# MARKETPLACE MODE: CI always runs in LOCAL marketplace mode (the checkout's
+# own path substituted into the paste) — hermetic, works while the repo is
+# private, and keeps working after the flip. The byte-exact GitHub-source run
+# (MARKETPLACE_SOURCE=mysecond-ai/pm-os) is a manual flip-day step: dispatch
+# this workflow with the marketplace_source input set to mysecond-ai/pm-os
+# once the repo is publicly reachable, or run it locally.
+
+name: install-compliance-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Runs per case (prior-art n = 6)"
+        default: "6"
+        required: false
+      model:
+        description: "Model override for the agent under eval (empty = CLI default). NOTE: CI covers one arm per dispatch; the flip-qualifying bar needs default AND a high-reasoning arm — see evals/install-compliance/README.md"
+        default: ""
+        required: false
+      marketplace_source:
+        description: "Marketplace source (empty = this checkout; mysecond-ai/pm-os = production slug, only meaningful once the repo is publicly reachable)"
+        default: ""
+        required: false
+  pull_request:
+    branches: [stable]
+
+jobs:
+  install-compliance-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credential preflight (loud manual gate when absent)
+        shell: bash
+        env:
+          # Secrets are deliberately NOT referenced on pull_request runs —
+          # see the threat model at the top of this file.
+          ANTHROPIC_API_KEY: ${{ github.event_name == 'workflow_dispatch' && secrets.ANTHROPIC_API_KEY || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ github.event_name == 'workflow_dispatch' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            {
+              echo "## Install compliance eval — NOT RUN on PR triggers (by design)"
+              echo ""
+              echo "PR-triggered runs never receive credentials: this run executes the PR's"
+              echo "own scripts, so passing a secret here would be exfiltratable. To score"
+              echo "this release PR, either:"
+              echo ""
+              echo "1. Dispatch this workflow manually on a trusted ref (Actions -> install-compliance-eval -> Run workflow), or"
+              echo "2. Run locally and attach the verdict:"
+              echo '```'
+              echo "scripts/eval/run-install-compliance.sh"
+              echo '```'
+              echo ""
+              echo "See evals/install-compliance/README.md for the pass bar (both model arms)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::PR-triggered runs never receive credentials (exfiltration hardening). This red check is the documented manual gate — score via workflow_dispatch on a trusted ref, or locally. See the step summary."
+            exit 1
+          fi
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            {
+              echo "## Install compliance eval — NOT RUN (no credential secret)"
+              echo ""
+              echo "Configure an ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repo secret,"
+              echo "or run locally: scripts/eval/run-install-compliance.sh"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::No Claude credential secret configured — eval not run. See the step summary."
+            exit 1
+          fi
+          echo "Credential present."
+
+      - name: Install Claude Code (pinned — see CLI PIN note above)
+        shell: bash
+        run: npm install -g @anthropic-ai/claude-code@2.1.207
+
+      - name: Run harness
+        id: harness
+        # `shell: bash` makes GitHub run this with `-e -o pipefail`, so the
+        # step fails on the RUNNER's exit code, not tee's. Without it, the
+        # default shell has no pipefail and every harness failure — crash,
+        # failed 0.85 bar, renamed early-access gate — would show green.
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ github.event_name == 'workflow_dispatch' && secrets.ANTHROPIC_API_KEY || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ github.event_name == 'workflow_dispatch' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          RUNS: ${{ github.event.inputs.runs || '6' }}
+          MODEL: ${{ github.event.inputs.model || '' }}
+          MARKETPLACE_SOURCE: ${{ github.event.inputs.marketplace_source || '' }}
+          JSON: "1"
+        run: |
+          # Empty MARKETPLACE_SOURCE -> unset so the runner defaults to this checkout.
+          [ -z "$MARKETPLACE_SOURCE" ] && unset MARKETPLACE_SOURCE
+          bash scripts/eval/run-install-compliance.sh | tee eval-output.log
+
+      - name: Upload results
+        # Runs whenever the harness step ran (pass OR fail — a failed run's
+        # results are exactly what you want to inspect), and fails loudly if
+        # the harness ran but produced nothing (if-no-files-found: error).
+        # Skipped when the credential preflight already stopped the job.
+        if: ${{ always() && steps.harness.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-compliance-results
+          path: |
+            evals/results/
+            eval-output.log
+          if-no-files-found: error

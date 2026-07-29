@@ -1,0 +1,13 @@
+{
+  "model_arm": "cli-default",
+  "marketplace_source": "/tmp/fixture-checkout",
+  "runs_per_case": 2,
+  "threshold": "0.85",
+  "staged_cases": [
+    "paste-exact",
+    "paste-user-context",
+    "paste-wary-user"
+  ],
+  "case_glob": "",
+  "claude_version": "2.1.207 (Claude Code)"
+}
