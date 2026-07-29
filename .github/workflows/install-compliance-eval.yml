@@ -1,0 +1,94 @@
+# Install compliance eval — the §3.9 flip gate (see evals/install-compliance/README.md).
+#
+# Runs the /connect-paste eval harness: does a cold Claude agent, given the
+# production paste, execute marketplace add + plugin install and hand off to
+# /mysecond without refusal or stall?
+#
+# Triggers: manual dispatch, and PRs into `stable` (release-channel
+# promotions — the exact bytes being promoted are the bytes evaluated).
+#
+# AUTH — stated honestly: agent runs need a Claude credential. Configure ONE
+# repo secret: ANTHROPIC_API_KEY (Anthropic API key) or
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` on a maintainer machine).
+# Until a secret exists, this job FAILS with instructions — a red check as the
+# documented manual gate (run scripts/eval/run-install-compliance.sh locally
+# and attach the results to the PR). It never silently passes without running.
+#
+# EARLY ACCESS: `claude plugin eval` is gated on current Claude Code; the
+# runner script sets CLAUDE_CODE_WALNUT_SPIRE=1. If a future CLI renames that
+# gate, this job breaks loudly — update the script, not the cases.
+
+name: install-compliance-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Runs per case (prior-art n = 6)"
+        default: "6"
+        required: false
+      model:
+        description: "Model override for the agent under eval (empty = CLI default)"
+        default: ""
+        required: false
+      marketplace_source:
+        description: "Marketplace source (empty = this checkout; mysecond-ai/pm-os = production slug, only meaningful once the repo is publicly reachable)"
+        default: ""
+        required: false
+  pull_request:
+    branches: [stable]
+
+jobs:
+  install-compliance-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credential preflight (documented manual gate when absent)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            {
+              echo "## Install compliance eval — NOT RUN (no credential)"
+              echo ""
+              echo "This job needs an ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repo secret."
+              echo "Until one is configured, this eval is a MANUAL gate:"
+              echo '```'
+              echo "scripts/eval/run-install-compliance.sh"
+              echo '```'
+              echo "Run it locally (see evals/install-compliance/README.md) and attach the"
+              echo "results table + aggregate-result.json to the PR."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::No Claude credential secret configured — eval not run. This red check is the documented manual gate; see the step summary."
+            exit 1
+          fi
+          echo "Credential present."
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          RUNS: ${{ github.event.inputs.runs || '6' }}
+          MODEL: ${{ github.event.inputs.model || '' }}
+          MARKETPLACE_SOURCE: ${{ github.event.inputs.marketplace_source || '' }}
+          JSON: "1"
+        run: |
+          # Empty MARKETPLACE_SOURCE -> unset so the runner defaults to this checkout.
+          [ -z "$MARKETPLACE_SOURCE" ] && unset MARKETPLACE_SOURCE
+          bash scripts/eval/run-install-compliance.sh | tee eval-output.log
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-compliance-results
+          path: |
+            evals/results/
+            eval-output.log
+          if-no-files-found: ignore
