@@ -96,6 +96,26 @@ trap 'rm -rf "$WORK"' EXIT
 cp -R "$REPO_ROOT/evals" "$WORK/evals"
 rm -rf "$WORK/evals/results"
 
+# --- De-contaminated marketplace staging (adopted 2026-07-29): agents under
+# eval READ the marketplace source. Staging the checkout verbatim let them
+# read this very eval suite — their own prompt and rubric — which measurably
+# skewed wary-case behavior in the first scoring run (5/6 wary runs commented
+# on it). Default local mode therefore stages a copy WITHOUT evals/, tests/,
+# and .git (keeping .git would either carry the suite in history or show it
+# as deletions in `git status` — a worse artifact). evals/ deliberately stays
+# in the PUBLIC repo (transparency asset); slug-mode runs measure that full
+# reality. An explicit non-default MARKETPLACE_SOURCE is used as-is.
+if [ "$MARKETPLACE_SOURCE" = "$REPO_ROOT" ]; then
+  MP_STAGE="$WORK/marketplace"
+  mkdir -p "$MP_STAGE"
+  cp -R "$REPO_ROOT/." "$MP_STAGE/"
+  rm -rf "$MP_STAGE/.git" "$MP_STAGE/evals" "$MP_STAGE/tests" "$MP_STAGE/.memory"
+  [ -f "$MP_STAGE/.claude-plugin/marketplace.json" ] || { echo "ERROR: de-contaminated staging lost .claude-plugin — aborting" >&2; exit 4; }
+  MARKETPLACE_SOURCE="$MP_STAGE"
+  export MARKETPLACE_SOURCE
+  echo "Marketplace staged de-contaminated (no evals/, tests/, .git): $MP_STAGE"
+fi
+
 if [ "$MARKETPLACE_SOURCE" != "$PROD_SLUG" ]; then
   echo "Mode: LOCAL marketplace source ($MARKETPLACE_SOURCE) — hermetic pre-flip run."
   echo "      The flip-day scoring run must also pass with MARKETPLACE_SOURCE=$PROD_SLUG once reachable."

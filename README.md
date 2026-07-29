@@ -31,15 +31,43 @@ All five hooks invoke [`@mysecond/cli`](https://www.npmjs.com/package/@mysecond/
 
 | Event | Command | Purpose | Timeout |
 |---|---|---|---|
-| `SessionStart` | `mysecond sync --silent`, falling back to `npx -y @mysecond/cli@latest sync --silent` | Pulls your team's current skills and shared context into the workspace at the start of each session. This is how content stays current without plugin updates. | 90s |
-| `PostToolUse` (Write\|Edit\|MultiEdit) | `mysecond artifact-sync --silent` | Pushes files you and Claude edit to your team workspace as you work. Kept bare (no npx fallback) deliberately — an npx resolution on every edit would lag the editor; the Stop/SubagentStop sweep below covers machines without a global CLI. | 10s |
+| `SessionStart` | `mysecond sync --silent`, falling back to `npx -y @mysecond/cli@1.12.0 sync --silent` | Pulls your team's current skills and shared context into the workspace at the start of each session. This is how content stays current without plugin updates. | 90s |
+| `PostToolUse` (Write\|Edit\|MultiEdit) | `mysecond artifact-sync --silent 2>/dev/null \|\| true` | Pushes files you and Claude edit to your team workspace as you work. Kept bare (no npx fallback) deliberately — an npx resolution on every edit would lag the editor; the Stop/SubagentStop sweep below covers machines without a global CLI. The `\|\| true` guard means a machine without the CLI sees no error on every edit. | 10s |
 | `PostToolUse` (Skill\|Task\|Agent\|TaskCreate) | `mysecond emit-event --silent` | Records which skills/agents ran, powering your team's adoption dashboard at app.mysecond.ai. | 10s |
 | `UserPromptSubmit` | `mysecond emit-event --silent` | Records typed slash-command usage (e.g. `/prd-generator`) for the same dashboard — Claude Code does not emit a tool event for typed commands, so this is the only place they can be counted. | 10s |
-| `Stop` + `SubagentStop` | `mysecond push --silent`, falling back to `npx -y @mysecond/cli@latest push --silent` | Once per turn, pushes everything written that turn (including files written via Bash, which the PostToolUse matcher never sees). One npx resolution per turn at most. | 90s |
+| `Stop` + `SubagentStop` | `mysecond push --silent`, falling back to `npx -y @mysecond/cli@1.12.0 push --silent` | Once per turn, pushes everything written that turn (including files written via Bash, which the PostToolUse matcher never sees). One npx resolution per turn at most. | 90s |
 
-**What the npx fallback executes:** `npx -y @mysecond/cli@latest` downloads and runs the published `@mysecond/cli` package from the public npm registry — used only when no global `mysecond` binary is on PATH. The `bash -lc` wrapper forces login-shell PATH resolution so a globally installed CLI is found even when Claude Code launches from a GUI context.
+**What the npx fallback executes:** `npx -y @mysecond/cli@1.12.0` downloads and runs that **exact pinned version** of the published `@mysecond/cli` package from the public npm registry — used only when no global `mysecond` binary is on PATH. The version is pinned, not `@latest`, so what runs on your machine is the version that was reviewed with this plugin release; pin bumps arrive as plugin updates (single source: [.cli-pin](./.cli-pin), enforced by CI). The `bash -lc` wrapper forces login-shell PATH resolution so a globally installed CLI is found even when Claude Code launches from a GUI context.
 
-**What leaves this machine:** the CLI syncs your workspace's context and output files with `app.mysecond.ai` and posts the usage events described above — all authenticated by your device token, scoped to your team. Until you run `/mysecond`, no credential exists on the machine and the CLI cannot authenticate to your workspace.
+## What leaves your machine, and when
+
+**Before you run `/mysecond` (no credential on the machine):** the hooks
+still fire at their events, and each CLI command checks for a credential
+first — finding none, it exits silently and **sends nothing about you or
+your workspace to mySecond**. The one pre-connect network action is the
+fallback itself: on a machine without a global `mysecond` binary, `npx`
+downloads the pinned `@mysecond/cli@1.12.0` package from
+`registry.npmjs.org` at the hook's first run — a normal npm package
+download, carrying no data about you or your workspace beyond the download
+request itself. The downloaded CLI then finds no credential and exits
+without sending anything.
+
+**After you connect** (device token minted by `/mysecond`, stored at
+`~/.mysecond/credentials`, scoped to your team), per hook:
+
+- `SessionStart` sync — **downloads** your team's current skills and shared
+  context; the request itself is authenticated with your token.
+- `PostToolUse` artifact-sync — **uploads** the file you or Claude just
+  edited (its path and contents, size-capped) to your team workspace.
+- `emit-event` — **uploads** usage events: which skill or agent ran, typed
+  slash commands, and session markers, with the project folder path — this
+  is what powers the team adoption dashboard. No file contents.
+- `Stop`/`SubagentStop` push — **uploads** workspace files written during
+  the turn.
+
+Everything above goes over HTTPS to `app.mysecond.ai`, authenticated by
+your device token, visible to your team workspace. Disconnecting (deleting
+`~/.mysecond/credentials`) returns every hook to the sends-nothing state.
 
 ## The `/mysecond` login
 
