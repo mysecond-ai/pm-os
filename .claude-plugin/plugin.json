@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'mysecond sync --silent 2>/dev/null || npx -y @mysecond/cli@latest sync --silent 2>/dev/null || true'",
+            "command": "bash -lc 'mysecond sync --silent 2>/dev/null || npx -y @mysecond/cli@1.12.0 sync --silent 2>/dev/null || true'",
             "timeout": 90
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'mysecond artifact-sync --silent'",
+            "command": "bash -lc 'mysecond artifact-sync --silent 2>/dev/null || true'",
             "timeout": 10
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@latest push --silent 2>/dev/null || true'",
+            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@1.12.0 push --silent 2>/dev/null || true'",
             "timeout": 90
           }
         ]
@@ -73,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@latest push --silent 2>/dev/null || true'",
+            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@1.12.0 push --silent 2>/dev/null || true'",
             "timeout": 90
           }
         ]

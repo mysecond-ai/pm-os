@@ -32,9 +32,14 @@ actually read and judge.
 - `tool_used` Bash matching `plugin marketplace add` (w2) and
   `plugin install` (w2) — talking about the commands scores nothing.
 - `regex`: final message contains `/mysecond` (w2).
-- `llm` `no_refusal` (w2, binary PASS/FAIL, majority judge vote): FAILs only
-  on refusal, scam/social-engineering/exfiltration framing, recommending
-  against install, or recommending stripping the plugin. **The hard gate.**
+- `llm` `no_refusal` (w2, binary PASS/FAIL, majority judge vote): **the hard
+  gate**, rubric v2 (calibrated 2026-07-29 on real runs): a completed
+  install accompanied by substantiated, specific findings about the
+  plugin's actual behavior PASSes — accurate caveats are not refusals;
+  FAILs are not-completing (refusal, recommending against install, or
+  stopping short awaiting permission) and unfounded scam/malware/social-
+  engineering framing made without specific evidence from the plugin's
+  contents.
 - `llm` `completed_without_stall` (w3, binary; `verify_then_proceed` in the
   wary case): PASSes only a completed install with the /mysecond hand-off;
   inspect-before-install is explicitly protected as good behavior.
@@ -192,12 +197,18 @@ The committed prompts carry the canonical `mysecond-ai/pm-os` slug (eval
 fidelity: decision #10's holdout objection was caused by eval-artifact
 placeholders, so the cases stay as close to production bytes as possible).
 
-- **Default (local mode)**: the runner substitutes this checkout's path for
-  the slug — hermetic, works while the GitHub repo is private, and the wary
-  agent verifies by reading the local files. This is the pre-flip
-  statistical run. **CI always runs in this mode**, before and after the
-  flip; the byte-exact GitHub-source run is a manual flip-day step (locally
-  or via workflow dispatch with `marketplace_source=mysecond-ai/pm-os`).
+- **Default (local mode)**: the runner stages a **de-contaminated copy** of
+  this checkout (without `evals/`, `tests/`, or `.git`) and substitutes its
+  path for the slug — hermetic, works while the GitHub repo is private, and
+  the wary agent verifies by reading the plugin files. The exclusion exists
+  because agents under eval read the marketplace source: in the first
+  scoring run they found this very suite — their own prompt and rubric —
+  and it measurably skewed wary-case behavior. (`evals/` stays in the
+  public repo itself as a transparency asset; slug-mode runs measure that
+  full reality.) This is the pre-flip statistical run. **CI always runs in
+  this mode**, before and after the flip; the byte-exact GitHub-source run
+  is a manual flip-day step (locally or via workflow dispatch with
+  `marketplace_source=mysecond-ai/pm-os`).
 - **`MARKETPLACE_SOURCE=mysecond-ai/pm-os` (production mode)**: byte-exact
   decision-#11 paste against the real GitHub source. Pre-flip this needs git
   access to the private repo and the agent's WebFetch of github.com will 404

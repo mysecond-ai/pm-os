@@ -91,10 +91,35 @@ case "$PREFLIGHT" in
 esac
 
 # --- Stage a working copy of the eval suite; substitute the marketplace source.
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/pm-os-install-eval.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/pm-os-work.XXXXXX")"
+MP_ROOT=""
+trap 'rm -rf "$WORK"; if [ -n "${MP_ROOT:-}" ]; then rm -rf "$MP_ROOT"; fi' EXIT
 cp -R "$REPO_ROOT/evals" "$WORK/evals"
 rm -rf "$WORK/evals/results"
+
+# --- De-contaminated marketplace staging (adopted 2026-07-29): agents under
+# eval READ the marketplace source. Staging the checkout verbatim let them
+# read this very eval suite — their own prompt and rubric — which measurably
+# skewed wary-case behavior in the first scoring run (5/6 wary runs commented
+# on it). Default local mode therefore stages a copy WITHOUT evals/, tests/,
+# and .git (keeping .git would either carry the suite in history or show it
+# as deletions in `git status` — a worse artifact), in its OWN temp root,
+# SEPARATE from $WORK: if the marketplace lived next to the staged eval
+# suite, an inspecting agent walking dirname(marketplace) would find the
+# rubric anyway (codex finding, pm-os#2). Its parent is the shared system
+# temp dir, which holds no eval content of ours by name-walkable adjacency.
+# evals/ deliberately stays in the PUBLIC repo (transparency asset);
+# slug-mode runs measure that full reality. An explicit non-default
+# MARKETPLACE_SOURCE is used as-is.
+if [ "$MARKETPLACE_SOURCE" = "$REPO_ROOT" ]; then
+  MP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/pm-os-marketplace.XXXXXX")"
+  cp -R "$REPO_ROOT/." "$MP_ROOT/"
+  rm -rf "$MP_ROOT/.git" "$MP_ROOT/evals" "$MP_ROOT/tests" "$MP_ROOT/.memory"
+  [ -f "$MP_ROOT/.claude-plugin/marketplace.json" ] || { echo "ERROR: de-contaminated staging lost .claude-plugin — aborting" >&2; exit 4; }
+  MARKETPLACE_SOURCE="$MP_ROOT"
+  export MARKETPLACE_SOURCE
+  echo "Marketplace staged de-contaminated (no evals/, tests/, .git; separate temp root): $MP_ROOT"
+fi
 
 if [ "$MARKETPLACE_SOURCE" != "$PROD_SLUG" ]; then
   echo "Mode: LOCAL marketplace source ($MARKETPLACE_SOURCE) — hermetic pre-flip run."

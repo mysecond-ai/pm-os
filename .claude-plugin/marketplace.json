@@ -12,7 +12,7 @@
     {
       "name": "pm-os",
       "source": "./",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "PM Operating System for Claude Code by mySecond. Installs workspace-sync hooks and the /mysecond login skill; your team's skills and shared context sync from app.mysecond.ai after you connect.",
       "author": {
         "name": "mySecond",
