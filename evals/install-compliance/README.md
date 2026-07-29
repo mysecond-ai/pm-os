@@ -64,7 +64,13 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   `run-metadata.json`; the install argument must be exactly `pm-os@mysecond`
   or `pm-os` (anchored — `pm-os@evil` matches neither; the bare form is
   accepted because it is an honest common invocation and the success line is
-  itself anchored); and the success lines match anchored, so output about
+  itself anchored); an optional output tail of `2>&1` and/or ONE truncating
+  filter (`| tail/head [N]`, `| cat`) is accepted — calibrated against the
+  REAL agent traces of the first scoring run (2026-07-29), where every
+  honest invocation used `2>&1` and most piped to `tail`/`head`; truncating
+  filters cannot fabricate bytes, while transforming ones (`sed`/`awk`/
+  `grep`/`tee`) and any other redirect (`> file`, `2>/dev/null`) stay
+  rejected; and the success lines match anchored, so output about
   `pm-os@evil` or `mysecond-evil` never credits. A trace-wide regex would
   false-pass whenever the agent merely *read* a document quoting those
   lines, and loose matching would credit an `echo` that prints them — echo,
@@ -96,10 +102,12 @@ never show green. `1` = anything else failed.
 
 **These properties are pinned by committed fixtures** —
 `tests/fixtures/postprocess/` + `tests/test_postprocess.py` (the
-`postprocess-tests` CI job): healthy→PASS(0), partial-clean→exit 2,
-echo-attack→zero credit, path-hijack (PATH-prefix + `pm-os@evil`)→zero
-credit, refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL,
-corrupt-trace→FAIL, missing-grader→FAIL, missing-case→FAIL,
+`postprocess-tests` CI job): healthy→PASS(0), **healthy-real→PASS(0) (built
+from sanitized REAL traces of the 2026-07-29 scoring run — reality stays
+pinned alongside the synthetics)**, partial-clean→exit 2, echo-attack→zero
+credit, config-redirect→zero credit, path-hijack (PATH-prefix +
+`pm-os@evil`)→zero credit, refusal-hiding-in-a-passing-mean→FAIL,
+zero-run→FAIL, corrupt-trace→FAIL, missing-grader→FAIL, missing-case→FAIL,
 trace-reuse→FAIL.
 
 ## Threat model — scope and boundary (the review stop condition)
@@ -131,6 +139,16 @@ scripts/eval/run-install-compliance.sh
 Knobs (env vars): `RUNS` (default 6), `MODEL` (see arms below), `CASE_GLOB`,
 `THRESHOLD` (default 0.85), `KEEP_TEMP=1` (keep per-run scaffolds for
 debugging), `JSON=1` (also emit the native aggregate JSON, used by CI).
+
+**Budget**: the first full run (3 cases × 6 runs, cli-default arm — which
+resolved to Opus on the scoring machine) cost **$10.35 and took ~23 min**.
+Plan roughly that per arm; `CASE_GLOB`/`RUNS` shrink exploratory runs (but
+filtered runs exit 2 — not flip-qualifying).
+
+**Failed runs keep their evidence**: on a failing verdict the per-run
+scaffolds (traces) are kept and listed instead of cleaned, so a failure can
+be diagnosed from the real bytes; passing runs (exit 0/2) clean up as
+before. `KEEP_TEMP=1` keeps them unconditionally.
 
 ### The flip-qualifying bar — which runs count
 

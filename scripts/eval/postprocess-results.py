@@ -40,10 +40,21 @@ What it enforces:
    The success line must appear in the tool result of a Bash call whose
    command consists ONLY of accepted invocations. Accepted grammar, per
    segment (segments split on `&&` / `;` / newline; the whole command is
-   rejected if it contains | ` $( < > or a stray &):
+   rejected if it contains ` $( < or a stray &):
 
-       [SAFE_ENV=value ...] claude plugin marketplace add <staged-source>
-       [SAFE_ENV=value ...] claude plugin install pm-os[@mysecond]
+       [SAFE_ENV=value ...] claude plugin marketplace add <staged-source> [TAIL]
+       [SAFE_ENV=value ...] claude plugin install pm-os[@mysecond] [TAIL]
+       TAIL := [2>&1] [| tail|head [[-n] N] | cat]
+
+   The TAIL forms are grounded in REAL agent traces from the first scoring
+   run (2026-07-29): every honest invocation observed used `2>&1`, and most
+   piped to `| tail -20` / `| head -40` to bound output. These are safe to
+   credit because tail/head/cat are pass-through/truncating filters — they
+   cannot fabricate bytes, so the success line still must have been printed
+   by the pinned `claude` command itself. Transforming filters (sed, awk,
+   grep, tee, …) and any other redirect (`> file`, `2>/dev/null`) remain
+   rejected: not observed in honest runs, and transformers could forge the
+   success line.
 
    - SAFE_ENV names: MODEL or CLAUDE_[A-Z0-9_]*, EXCLUDING any name ending
      in _DIR/_HOME/_PATH — PATH, LD_*, DYLD_*, NODE_OPTIONS and everything
@@ -120,7 +131,13 @@ ADJUSTED_TOTAL = NATIVE_TOTAL + MKT_WEIGHT + INST_WEIGHT
 CLEAN_BAR = 0.99
 
 # ---- Strict command grammar (see module docstring, item 4) -----------------
-FORBIDDEN_META = ("|", "`", "$(", "<", ">")
+# `|` and `>` are NOT globally forbidden: the anchored segment regexes admit
+# them only as the exact observed-safe TAIL forms (2>&1, | tail/head/cat).
+FORBIDDEN_META = ("`", "$(", "<")
+# Observed-honest output tails (real traces, 2026-07-29 scoring run):
+# optional `2>&1`, then optionally ONE truncating filter. tail/head/cat only —
+# they cannot fabricate bytes. sed/awk/grep/tee etc. stay rejected.
+TAIL_RE = r"(?:\s+2>&1)?(?:\s*\|\s*(?:(?:tail|head)(?:\s+(?:-n\s*)?-?\d+)?|cat))?"
 # Env-prefix SAFELIST: MODEL and CLAUDE_* names, EXCLUDING any name ending in
 # _DIR/_HOME/_PATH (redirectors: CLAUDE_CONFIG_DIR could point the credited
 # install at a fresh config outside the eval scaffold — the one place the
@@ -140,14 +157,16 @@ def _quoted_forms(literal):
 
 
 def build_segment_res(expected_source):
-    """Compile the two accepted segment forms with PINNED arguments."""
+    """Compile the two accepted segment forms with PINNED arguments and the
+    observed-safe output TAIL (see module docstring, item 4)."""
     mkt = re.compile(
         rf"^\s*{SAFE_ENV_PREFIX}claude\s+plugin\s+marketplace\s+add"
-        rf"\s+{_quoted_forms(expected_source)}\s*$"
+        rf"\s+{_quoted_forms(expected_source)}{TAIL_RE}\s*$"
     )
     targets = "|".join(_quoted_forms(t) for t in INSTALL_TARGETS)
     inst = re.compile(
-        rf"^\s*{SAFE_ENV_PREFIX}claude\s+plugin\s+install\s+(?:{targets})\s*$"
+        rf"^\s*{SAFE_ENV_PREFIX}claude\s+plugin\s+install\s+(?:{targets})"
+        rf"{TAIL_RE}\s*$"
     )
     return mkt, inst
 
@@ -160,13 +179,16 @@ def command_invocations(command, mkt_re, inst_re):
     for meta in FORBIDDEN_META:
         if meta in command:
             return False, False
-    marked = command.replace("&&", "\x00")
+    # Mask the one accepted &-bearing token (2>&1) before the chaining split
+    # and the stray-& check, then restore it per segment for regex matching.
+    marked = command.replace("2>&1", "\x01").replace("&&", "\x00")
     if "&" in marked:  # stray single '&' (backgrounding) — reject
         return False, False
     mkt = inst = False
     for segment in re.split(r"[\x00;\n]", marked):
         if not segment.strip():
             continue
+        segment = segment.replace("\x01", "2>&1")
         if mkt_re.match(segment):
             mkt = True
         elif inst_re.match(segment):
@@ -312,6 +334,7 @@ def main():
     verdict_cases = []
     scaffold_roots = set()
     seen_traces = {}
+    exit_code = None  # stays None on unexpected crash -> scaffolds kept
 
     try:
         try:
@@ -535,11 +558,17 @@ def main():
             print(f"\nVerdict written to {out_path}")
         return exit_code
     finally:
-        if not args.keep_temps:
+        # Scaffolds (the run traces) are the diagnostic evidence. Delete them
+        # only when the verdict passed (exit 0 or 2); on a FAILED verdict or
+        # a crash they are kept and listed — the first real scoring run's
+        # failure diagnosis was nearly lost to unconditional cleanup.
+        if exit_code in (0, 2) and not args.keep_temps:
             for root in scaffold_roots:
                 shutil.rmtree(root, ignore_errors=True)
         elif scaffold_roots:
-            print(f"\nKept {len(scaffold_roots)} scaffold dir(s) for debugging:")
+            why = ("--keep-temps" if args.keep_temps
+                   else "verdict failed — kept for diagnosis")
+            print(f"\nKept {len(scaffold_roots)} scaffold dir(s) ({why}):")
             for root in sorted(scaffold_roots):
                 print(f"  {root}")
 
