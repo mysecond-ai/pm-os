@@ -1,0 +1,83 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "pm-os",
+  "description": "PM Operating System for Claude Code by mySecond. This shell installs workspace-sync hooks and the /mysecond login skill; your team's skills and shared context sync from app.mysecond.ai after you connect. The version for this plugin is declared in .claude-plugin/marketplace.json — the single source of truth. Do not add a version field to this file: a plugin.json version silently takes precedence over the marketplace entry and breaks release discipline.",
+  "author": {
+    "name": "mySecond",
+    "url": "https://mysecond.ai"
+  },
+  "homepage": "https://mysecond.ai",
+  "keywords": ["product-management", "pm-os", "mysecond"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond sync --silent 2>/dev/null || npx -y @mysecond/cli@latest sync --silent 2>/dev/null || true'",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond artifact-sync --silent'",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Skill|Task|Agent|TaskCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond emit-event --silent 2>/dev/null || true'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond emit-event --silent 2>/dev/null || true'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@latest push --silent 2>/dev/null || true'",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'mysecond push --silent 2>/dev/null || npx -y @mysecond/cli@latest push --silent 2>/dev/null || true'",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}

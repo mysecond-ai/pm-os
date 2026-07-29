@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # IP guardrail — fails if any product content (skills other than
+  # skills/mysecond/, any agents/ or workflows/ dir) or a plugin.json
+  # version field ever appears in this public shell repo.
+  allowlist-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run allowlist gate
+        run: bash scripts/check-allowlist.sh
+
+  # Secret scanning over full history — this repo is public-bound; anything
+  # ever committed is published forever.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned)
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+      - name: Scan full git history
+        run: /tmp/gitleaks detect --source . --redact --no-banner
+
+  # Manifest validation + token-cost check via the real Claude Code CLI.
+  plugin-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin + marketplace manifests
+        # NOT --strict: strict mode fails on the one warning we produce on
+        # purpose — plugin.json has no "version" field. That omission is
+        # policy (version lives in marketplace.json ONLY; a plugin.json
+        # version silently takes precedence), enforced by the allowlist
+        # gate. Any NEW warnings should be investigated in the log.
+        run: claude plugin validate .
+      - name: Token-cost check (claude plugin details)
+        # Installs the plugin from this checkout into an isolated config dir
+        # and surfaces the component inventory + projected token cost in the
+        # job log. Review this output on every PR — the always-on context
+        # cost of the shell must stay near zero (content is runtime-synced,
+        # not shipped here).
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude-config
+        run: |
+          mkdir -p "$CLAUDE_CONFIG_DIR"
+          claude plugin marketplace add ./
+          claude plugin install pm-os@mysecond
+          claude plugin details pm-os@mysecond

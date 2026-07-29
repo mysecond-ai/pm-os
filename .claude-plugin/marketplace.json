@@ -1,0 +1,27 @@
+{
+  "name": "mysecond",
+  "owner": {
+    "name": "mySecond",
+    "url": "https://mysecond.ai"
+  },
+  "metadata": {
+    "description": "The mySecond plugin marketplace. One plugin: pm-os, the PM Operating System for Claude Code.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "pm-os",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "PM Operating System for Claude Code by mySecond. Installs workspace-sync hooks and the /mysecond login skill; your team's skills and shared context sync from app.mysecond.ai after you connect.",
+      "author": {
+        "name": "mySecond",
+        "url": "https://mysecond.ai"
+      },
+      "homepage": "https://mysecond.ai",
+      "license": "SEE LICENSE IN LICENSE",
+      "keywords": ["product-management", "pm-os", "mysecond"],
+      "category": "productivity"
+    }
+  ]
+}

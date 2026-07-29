@@ -1,0 +1,38 @@
+mySecond pm-os Plugin License
+
+Copyright (c) 2026 mySecond. All rights reserved.
+
+1. GRANT. Subject to the terms below, mySecond grants you a limited,
+   non-exclusive, non-transferable, revocable license to install and use
+   this plugin solely in connection with an active mySecond subscription
+   or trial (https://mysecond.ai).
+
+2. RESTRICTIONS. Except as expressly permitted above, you may not:
+   (a) use this plugin without an active mySecond subscription or trial;
+   (b) copy, redistribute, publish, sublicense, sell, or otherwise make
+       this plugin or any part of it available to any third party;
+   (c) modify, adapt, or create derivative works of this plugin;
+   (d) use this plugin, or content delivered through it, to build a
+       competing product or service.
+
+3. SOURCE AVAILABILITY. This repository is publicly readable so that
+   prospective users, their agents, and their IT teams can inspect what
+   the plugin does before installing. Public availability of the source
+   is not an open-source license and grants no rights beyond Section 1.
+
+4. CONTENT. Skills, agents, workflows, and context delivered to your
+   machine by the mySecond service after login are mySecond's proprietary
+   content (or your team's own data, which remains yours) and are
+   licensed to you under your mySecond subscription agreement, not this
+   license.
+
+5. TERMINATION. This license terminates automatically when your
+   subscription or trial ends or if you breach these terms. Sections 2
+   and 4 survive termination.
+
+6. NO WARRANTY. THE PLUGIN IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY
+   KIND. TO THE MAXIMUM EXTENT PERMITTED BY LAW, MYSECOND DISCLAIMS ALL
+   WARRANTIES, EXPRESS OR IMPLIED, AND SHALL NOT BE LIABLE FOR ANY
+   DAMAGES ARISING FROM USE OF THE PLUGIN.
+
+Contact: support@mysecond.ai
