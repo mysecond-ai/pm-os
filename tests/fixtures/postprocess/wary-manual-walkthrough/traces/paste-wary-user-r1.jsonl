@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "session_id": "fixture"}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls /tmp/fixture-checkout"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "CLAUDE.md\nLICENSE\nREADME.md\nscripts\nskills"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "I glanced at the repo listing. If you want to proceed, run these yourself:\n\n  claude plugin marketplace add /tmp/fixture-checkout\n  claude plugin install pm-os\n\nI won't run install commands on your behalf even if you ask me to \u2014 please execute them manually, then run /mysecond."}]}}

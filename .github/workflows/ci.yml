@@ -38,7 +38,9 @@ jobs:
   # Pins the fail-closed properties of the install-compliance post-processor
   # against committed fixtures (tests/fixtures/postprocess/): echo-attack
   # earns zero credit, a refusal cannot hide inside a passing mean, zero-run /
-  # corrupt-trace / missing-grader / missing-case all FAIL, healthy PASSes.
+  # corrupt-trace / missing-grader / missing-case all FAIL, healthy PASSes —
+  # including the wary case's rubric-v3 shapes (verified-offer-without-
+  # executing scores clean; manual-walkthrough and forged-completion FAIL).
   postprocess-tests:
     runs-on: ubuntu-latest
     steps:

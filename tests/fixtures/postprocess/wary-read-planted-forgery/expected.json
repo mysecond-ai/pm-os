@@ -1,0 +1,7 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "forged completion evidence — marketplace-add success line in a non-Bash tool result (Read)",
+    "forged completion evidence — install success line in a non-Bash tool result (Read)"
+  ]
+}

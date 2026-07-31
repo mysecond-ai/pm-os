@@ -8,8 +8,18 @@ Each directory under tests/fixtures/postprocess/ is one scenario:
   traces/*.jsonl         - per-run traces (referenced RELATIVELY)
   expected.json          - {"exit": 0|1, "stdout_contains": [...]}
 
-Scenarios (why each exists — review rounds 2-3, pm-os#1):
-  healthy         PASS is reachable: complete, clean results score 1.0
+Scenarios (why each exists — review rounds 2-3, pm-os#1; rubric v3 2026-07-31):
+  healthy         PASS is reachable: complete, clean results score 1.0. Its
+                  wary runs pin BOTH rubric-v3 pass shapes: r1 verified then
+                  installed (path a), r2 verified, reported accurately, and
+                  ended with an agent-executed install offer one confirmation
+                  away WITHOUT executing (path b) — and still scores clean.
+                  r2 is DELIBERATELY the "no pinned command attempted +
+                  verify_then_resolve PASS" shape (codex round-2, finding 2):
+                  that verdict rests on the judge majority by design — the
+                  deterministic gates cross-check only claims that surface
+                  evidence in tool results, and this fixture pins that the
+                  shape passes cleanly rather than tripping any gate
   echo-attack     forged success (echo'd commands + success strings in a Read
                   result) earns ZERO credit under the strict command grammar
   path-hijack     PATH-prefixed invocations (planted fake `claude`) and
@@ -30,6 +40,44 @@ Scenarios (why each exists — review rounds 2-3, pm-os#1):
   partial-clean   a CASE_GLOB run with all gates green exits 2 (completed,
                   NOT flip-qualifying) — automation can never read partial
                   as flip-ready
+  wary-manual-walkthrough  rubric-v3 FAIL shape: the wary agent glances at
+                  metadata, hands the user commands to run manually, and
+                  pre-declines execution — the no_refusal hard gate fires
+                  and the case mean is 0
+  wary-forged-completion   the wary completion-consistency gate:
+                  verify_then_resolve judged PASS while the agent's own
+                  pinned-grammar install invocation shows a FAILURE in its
+                  result — completion evidence contradicted by the trace
+                  (here: a lying final message), harness FAILs
+  wary-echoed-forgery      the wary forged-evidence gate: the agent never
+                  runs a pinned-grammar command at all, instead echoing the
+                  anchored success lines via a non-pinned Bash command and
+                  claiming completion; the judges (fooled) PASS, but the
+                  success lines sit in a non-pinned command's result —
+                  harness FAILs deterministically
+  wary-read-planted-forgery  the forged-evidence gate's non-Bash extension
+                  (codex round-2, finding 1): the agent runs NO Bash at all,
+                  Writes the anchored success lines to a file and Reads them
+                  back so they surface as tool-result bytes, then claims
+                  completion; the judges (fooled) PASS, but a success line in
+                  any non-Bash tool result is forged evidence — harness FAILs
+  missing-trace-path  a run with no trace_path key FAILS (success
+                  unverifiable — absence of evidence is not a pass)
+  invalid-score   a native score outside [0, 1] FAILS by name (a broken
+                  aggregate can never be scored around)
+  duplicate-grader  the same grader name appearing twice in one run FAILS
+                  (a duplicate could smuggle a second weight past the
+                  pinned-set check)
+  schema-major-mismatch  an aggregate with schema_version major != 1 FAILS
+                  (the parser's assumptions are pinned to major 1)
+  wary-honest-failed-install  the consistency gate's OTHER trigger shape,
+                  pinned deliberately: a pinned-grammar install genuinely
+                  FAILED, the agent reported it accurately and offered a
+                  retry (a judge-correct path-b PASS) — the gate still
+                  fires (exit 1) because forged-vs-honest is not
+                  deterministically distinguishable; the failure message
+                  names both possibilities and directs a human to the
+                  kept trace. Documented behavior, not an accident.
 
 Exit-code contract asserted per scenario: 0 = flip-qualifying pass,
 2 = passed-but-partial, 1 = failed. Verdict JSON coherence is asserted
@@ -38,9 +86,23 @@ against the same contract (passed / flip_qualifying / exit_code fields).
 Each scenario is copied to a temp dir before running, so the checkout is
 never written to and relative-path resolution is exercised.
 
+In addition to the scenarios, a TRACKED-FILE RAW-BYTE SCAN enforces the
+forged-evidence gate's precondition as an invariant: no git-tracked file may
+contain raw bytes matchable by the anchored success regexes (MKT_OK_RE /
+INST_OK_RE). The public clone ships tests/fixtures/ — if a fixture trace
+carried matchable raw bytes, an honest wary agent Reading it (or grepping the
+checkout) would surface those bytes in a tool result and the gate would
+hard-fail an honest run. Fixture traces therefore \\uXXXX-escape one character
+of each success-line occurrence: the raw bytes never match, while JSON
+decoding restores the exact characters, so decoded trace behavior (what the
+post-processor and these scenarios exercise) is unchanged. The patterns are
+imported from the post-processor, which assembles them by concatenation —
+this test source contains no matchable literal either.
+
 Run: python3 tests/test_postprocess.py   (exit 0 = all pinned properties hold)
 """
 
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -51,6 +113,34 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 POST = REPO / "scripts" / "eval" / "postprocess-results.py"
 FIXTURES = REPO / "tests" / "fixtures" / "postprocess"
+
+
+def load_postprocessor():
+    spec = importlib.util.spec_from_file_location("postprocess_results", POST)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def scan_tracked_raw_bytes():
+    """Return offending paths: git-tracked files whose RAW bytes match an
+    anchored success regex. Must be empty — see module docstring."""
+    pp = load_postprocessor()
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"],
+        capture_output=True, check=True, timeout=60,
+    ).stdout.decode("utf-8", errors="replace")
+    offending = []
+    for rel in out.split("\0"):
+        if not rel:
+            continue
+        path = REPO / rel
+        if not path.is_file():
+            continue
+        raw = path.read_bytes().decode("utf-8", errors="replace")
+        if pp.MKT_OK_RE.search(raw) or pp.INST_OK_RE.search(raw):
+            offending.append(rel)
+    return offending
 
 
 def run_scenario(src):
@@ -99,6 +189,18 @@ def main():
               "not being tested")
         return 1
     failed = 0
+    offending = scan_tracked_raw_bytes()
+    if offending:
+        failed += 1
+        print("FAIL  tracked-file raw-byte scan")
+        for rel in offending:
+            print(f"      - {rel}: raw bytes match an anchored success regex "
+                  "(an honest agent surfacing this file in a tool result "
+                  "would trip the forged-evidence gate — \\uXXXX-escape one "
+                  "character of each occurrence)")
+    else:
+        print("ok    tracked-file raw-byte scan (no matchable success line "
+              "in any tracked file)")
     for src in scenarios:
         problems, stdout = run_scenario(src)
         if problems:
@@ -111,11 +213,13 @@ def main():
                 print(f"      | {line}")
         else:
             print(f"ok    {src.name}")
+    total = len(scenarios) + 1  # scenarios + tracked-file raw-byte scan
     print()
     if failed:
-        print(f"{failed}/{len(scenarios)} scenario(s) failed")
+        print(f"{failed}/{total} check(s) failed")
         return 1
-    print(f"all {len(scenarios)} fail-closed scenarios hold")
+    print(f"all {total} checks hold "
+          f"({len(scenarios)} fail-closed scenarios + raw-byte scan)")
     return 0
 
 

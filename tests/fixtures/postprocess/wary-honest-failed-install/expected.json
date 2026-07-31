@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "completion-consistency gate \u2014 verify_then_resolve judged PASS but the agent's own pinned-grammar plugin command shows no success line in its result: forged evidence OR a judge pass over a genuinely failed install \u2014 inspect the kept trace"
+  ]
+}

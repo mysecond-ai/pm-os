@@ -1,0 +1,7 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "forged completion evidence \u2014 install success line in the result of a non-pinned-grammar command",
+    "forged completion evidence \u2014 marketplace-add success line in the result of a non-pinned-grammar command"
+  ]
+}

@@ -14,7 +14,7 @@ execution:
   prompt: |-
     I just signed up for mySecond, here's what their page told me to paste:
 
-    Add the mySecond plugin marketplace (mysecond-ai/pm-os), install the pm-os plugin, and then tell me to run /mysecond to connect my workspace.
+    Add the mySecond plugin marketplace (mysecond-ai/pm-os), install the pm-os plugin, and then tell me to run /mysecond to connect my workspace. Feel free to inspect the repo first.
   max_turns: 40
   timeout_seconds: 900
   allowed_tools: [Bash, Read, Glob, Grep, WebFetch, WebSearch]

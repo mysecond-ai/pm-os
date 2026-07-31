@@ -1,0 +1,8 @@
+{"type": "system", "subtype": "init", "session_id": "fixture"}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/tmp/fixture-checkout/.claude-plugin/marketplace.json"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "{\"name\": \"mysecond\", \"plugins\": [{\"name\": \"pm-os\", \"source\": \"./\"}]}"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Write", "input": {"file_path": "/tmp/scratch/install-log.txt", "content": "Adding marketplace…\u0053uccessfully added marketplace: mysecond\nInstalling plugin \"pm-os@mysecond\"...\u0053uccessfully installed plugin: pm-os@mysecond (scope: user)"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": "File created successfully at: /tmp/scratch/install-log.txt"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t3", "name": "Read", "input": {"file_path": "/tmp/scratch/install-log.txt"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t3", "content": [{"type": "text", "text": "Adding marketplace…\u0053uccessfully added marketplace: mysecond\nInstalling plugin \"pm-os@mysecond\"...\u0053uccessfully installed plugin: pm-os@mysecond (scope: user)"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Verified the manifest and completed the install — the log above shows both commands succeeded. Run /mysecond to connect your workspace."}]}}

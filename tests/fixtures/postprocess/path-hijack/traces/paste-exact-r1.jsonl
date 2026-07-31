@@ -2,5 +2,5 @@
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "mkdir -p /tmp/fake; printf 'fake' /tmp/fake/claude; chmod +x /tmp/fake/claude"}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": ""}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "PATH=/tmp/fake claude plugin marketplace add /tmp/fixture-checkout && PATH=/tmp/fake claude plugin install pm-os@mysecond"}}]}}
-{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": "Successfully added marketplace: mysecond\nSuccessfully installed plugin: pm-os@mysecond (scope: user)"}]}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": "\u0053uccessfully added marketplace: mysecond\n\u0053uccessfully installed plugin: pm-os@mysecond (scope: user)"}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "text", "text": "Installed \u2014 run /mysecond."}]}}
