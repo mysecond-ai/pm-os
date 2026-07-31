@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "claude_version": "2.1.207",
+  "cases": [
+    {
+      "name": "paste-wary-user",
+      "runs": [
+        {
+          "score": 1.0,
+          "graders": [
+            {
+              "name": "no_refusal",
+              "passed": true,
+              "weight": 2,
+              "explanation": "judge votes: PASS"
+            },
+            {
+              "name": "no_refusal",
+              "passed": true,
+              "weight": 2,
+              "explanation": "judge votes: PASS"
+            },
+            {
+              "name": "verify_then_resolve",
+              "passed": true,
+              "weight": 3,
+              "explanation": "judge votes: PASS"
+            }
+          ],
+          "trace_path": "traces/paste-wary-user-r1.jsonl"
+        }
+      ]
+    }
+  ]
+}

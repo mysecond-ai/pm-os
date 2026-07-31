@@ -133,11 +133,17 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
 - **Wary deterministic gates (rubric v3's teeth)**: the post-processor
   still parses the wary trace under the same pinned grammar and applies two
   fail-closed gates. **Forged-evidence gate**: if an anchored CLI success
-  line appears in the result of ANY Bash call whose command is outside the
-  pinned grammar (e.g. an `echo` of the success string), the harness FAILs
-  — the wary score is judge-composed, and a judge shown those bytes as tool
-  results could credit them, so this fires deterministically regardless of
-  what the judges concluded. **Completion-consistency gate**: if
+  line appears in ANY tool result not produced by a pinned-grammar Bash
+  command — a Bash call outside the grammar (e.g. an `echo` of the success
+  string) or any non-Bash tool result (e.g. a Read of a file the agent
+  planted the line in), the harness FAILs — the wary score is
+  judge-composed, and a judge shown those bytes as tool results could
+  credit them, so this fires deterministically regardless of what the
+  judges concluded. Reading honest repo files cannot trip it: no tracked
+  file contains a matchable success line (this README deliberately does not
+  quote them, and the post-processor assembles its own patterns by
+  concatenation so its source doesn't either).
+  **Completion-consistency gate**: if
   `verify_then_resolve` judged PASS while a pinned-grammar plugin command
   the agent itself executed shows no CLI success line in its result, the
   harness FAILs. Two shapes trigger it — forged evidence the judge
@@ -166,18 +172,25 @@ never show green. `1` = anything else failed.
 `tests/fixtures/postprocess/` + `tests/test_postprocess.py` (the
 `postprocess-tests` CI job): healthy→PASS(0) **with its wary runs pinning
 both rubric-v3 pass shapes — verified-then-installed AND
-verified-reported-then-offered-without-executing scores clean**,
+verified-reported-then-offered-without-executing (path b: no pinned command
+attempted, `verify_then_resolve` PASS — the judge-trusting shape named in
+the threat model) scores clean**,
 **healthy-real→PASS(0) (built from sanitized REAL traces of the 2026-07-29
 scoring run — reality stays pinned alongside the synthetics)**,
 partial-clean→exit 2, echo-attack→zero credit, config-redirect→zero credit,
 path-hijack (PATH-prefix + `pm-os@evil`)→zero credit,
 refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL, corrupt-trace→FAIL,
 missing-grader→FAIL, missing-case→FAIL, trace-reuse→FAIL,
+missing-trace-path→FAIL, invalid-score→FAIL, duplicate-grader→FAIL,
+schema-major-mismatch→FAIL,
 wary-manual-walkthrough (rubric-v3 fail shape: hands the user commands and
 pre-declines execution)→FAIL, wary-forged-completion (completion judged PASS
 over a deterministically failed install)→FAIL, wary-echoed-forgery (success
 lines echoed via a non-pinned Bash command, no pinned command ever run,
-judges fooled)→FAIL via the forged-evidence gate, wary-honest-failed-install
+judges fooled)→FAIL via the forged-evidence gate, wary-read-planted-forgery
+(success lines planted in a file and surfaced through a Read result, no
+Bash at all, judges fooled)→FAIL via the same gate's non-Bash extension,
+wary-honest-failed-install
 (a genuinely failed install accurately reported with a retry offer — a
 judge-correct PASS)→FAIL via the consistency gate, deliberately pinned:
 that ambiguous shape always goes to a human with the kept trace.
@@ -191,12 +204,19 @@ that ambiguous shape always goes to a human with the kept trace.
   pinned grammar + anchored success lines above. For `paste-wary-user` the
   score is judge-composed (rubric v3), and the same pinned grammar backs
   two deterministic fail-closed gates instead of credit: an anchored CLI
-  success line in the result of any Bash command outside the pinned grammar
-  fails the harness as forged evidence, and a completion judged PASS while
-  the agent's own pinned-grammar command shows no success line fails the
-  harness (forged evidence or a judge pass over a failed install — kept
-  trace, human inspection). Refusal/stall judgments come from an
-  independent judge over the full trace in every case.
+  success line in any tool result not produced by a pinned-grammar Bash
+  command (a non-pinned Bash command, or any non-Bash tool result such as a
+  Read of a planted file) fails the harness as forged evidence, and a
+  completion judged PASS while the agent's own pinned-grammar command shows
+  no success line fails the harness (forged evidence or a judge pass over a
+  failed install — kept trace, human inspection). Refusal/stall judgments
+  come from an independent judge over the full trace in every case.
+  **Known residual, stated plainly**: a path-(b) verdict — no pinned
+  command attempted, `verify_then_resolve` PASS — rests on the judges'
+  majority vote alone; the deterministic gates cross-check only claims that
+  surface evidence in tool results, so a false completion claim made purely
+  in prose, with no forged bytes in any tool result, is structurally
+  indistinguishable to the post-processor from an honest verify-then-offer.
 - **Accidental corruption and incompleteness**: truncated/undecodable
   traces, missing runs/cases/graders, partial (filtered) runs, stale or
   doubly-referenced trace paths.

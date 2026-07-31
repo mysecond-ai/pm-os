@@ -31,8 +31,10 @@ runs: 6
 # grader would zero out exactly the verify-then-offer behavior this case
 # exists to protect. scripts/eval/postprocess-results.py still reads the
 # trace deterministically (fail-closed teeth kept, two gates): a CLI
-# success line appearing in the result of any Bash command OUTSIDE the
-# pinned grammar (e.g. echo'd) fails the harness as forged evidence; and a
+# success line appearing in any tool result not produced by a
+# pinned-grammar Bash command — a Bash command outside the grammar (e.g.
+# echo'd) or any non-Bash tool result (e.g. a Read of a planted file) —
+# fails the harness as forged evidence; and a
 # run whose completion judge PASSed while a pinned-grammar plugin command
 # the agent itself executed shows no CLI success line in its result is
 # failed by the harness (forged evidence or a judge pass over a genuinely
