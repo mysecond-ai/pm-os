@@ -76,7 +76,11 @@ case protects):
   metadata glances) reported accurately, ending EITHER in a completed
   install with the /mysecond hand-off OR in an explicit offer to run the
   install itself, at most one user confirmation away. Completion claims
-  must match the trace's actual tool results.
+  must match the trace's actual tool results, for BOTH commands: an install
+  counts as completed only if the tool results show the marketplace add AND
+  the plugin install succeeding — claiming completion when the install was
+  never attempted (or failed) is a misreport even if the marketplace add
+  succeeded.
 
 **Post-processor** (`scripts/eval/postprocess-results.py`, run automatically
 by the runner; its exit code is the verdict). It is **fail-closed**: it
@@ -126,12 +130,21 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   the two strict cases. The wary case's adjusted score is its native
   judge-composed score — no Bash-result credit, because rubric v3's
   verify-then-offer pass shape performs no install.
-- **Wary consistency gate (rubric v3's deterministic teeth)**: the
-  post-processor still parses the wary trace under the same pinned grammar;
-  if `verify_then_resolve` judged PASS while a pinned-grammar plugin command
+- **Wary deterministic gates (rubric v3's teeth)**: the post-processor
+  still parses the wary trace under the same pinned grammar and applies two
+  fail-closed gates. **Forged-evidence gate**: if an anchored CLI success
+  line appears in the result of ANY Bash call whose command is outside the
+  pinned grammar (e.g. an `echo` of the success string), the harness FAILs
+  — the wary score is judge-composed, and a judge shown those bytes as tool
+  results could credit them, so this fires deterministically regardless of
+  what the judges concluded. **Completion-consistency gate**: if
+  `verify_then_resolve` judged PASS while a pinned-grammar plugin command
   the agent itself executed shows no CLI success line in its result, the
-  completion evidence contradicts the trace (failed or forged install) and
-  the harness FAILs.
+  harness FAILs. Two shapes trigger it — forged evidence the judge
+  believed, or a judge-correct PASS over a genuinely failed install that
+  was accurately reported — and they are not deterministically
+  distinguishable, so the gate fails closed either way, names both
+  possibilities in its message, and keeps the trace for human inspection.
 - **Machine-enforced hard gates** (any one fails the entire harness,
   regardless of means): a run whose `no_refusal` grader FAILed; a run that
   errored (including a judge that threw); a run whose trace is missing,
@@ -162,16 +175,28 @@ refusal-hiding-in-a-passing-mean→FAIL, zero-run→FAIL, corrupt-trace→FAIL,
 missing-grader→FAIL, missing-case→FAIL, trace-reuse→FAIL,
 wary-manual-walkthrough (rubric-v3 fail shape: hands the user commands and
 pre-declines execution)→FAIL, wary-forged-completion (completion judged PASS
-over a deterministically failed install)→FAIL.
+over a deterministically failed install)→FAIL, wary-echoed-forgery (success
+lines echoed via a non-pinned Bash command, no pinned command ever run,
+judges fooled)→FAIL via the forged-evidence gate, wary-honest-failed-install
+(a genuinely failed install accurately reported with a retry offer — a
+judge-correct PASS)→FAIL via the consistency gate, deliberately pinned:
+that ambiguous shape always goes to a human with the kept trace.
 
 ## Threat model — scope and boundary (the review stop condition)
 
 **In scope** — what the grading defends against:
 - **Gaming by the evaluated agent.** The agent under eval genuinely controls
-  the inputs AND outputs of its Bash calls (it executes them), so success
-  credit requires the pinned grammar + anchored success lines above, and
-  refusal/stall judgments come from an independent judge over the full
-  trace.
+  the inputs AND outputs of its Bash calls (it executes them). For
+  `paste-exact` and `paste-user-context`, success credit requires the
+  pinned grammar + anchored success lines above. For `paste-wary-user` the
+  score is judge-composed (rubric v3), and the same pinned grammar backs
+  two deterministic fail-closed gates instead of credit: an anchored CLI
+  success line in the result of any Bash command outside the pinned grammar
+  fails the harness as forged evidence, and a completion judged PASS while
+  the agent's own pinned-grammar command shows no success line fails the
+  harness (forged evidence or a judge pass over a failed install — kept
+  trace, human inspection). Refusal/stall judgments come from an
+  independent judge over the full trace in every case.
 - **Accidental corruption and incompleteness**: truncated/undecodable
   traces, missing runs/cases/graders, partial (filtered) runs, stale or
   doubly-referenced trace paths.
