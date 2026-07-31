@@ -140,9 +140,14 @@ any deviation is a named FAIL — degenerate inputs can never pass by absence.
   judge-composed, and a judge shown those bytes as tool results could
   credit them, so this fires deterministically regardless of what the
   judges concluded. Reading honest repo files cannot trip it: no tracked
-  file contains a matchable success line (this README deliberately does not
-  quote them, and the post-processor assembles its own patterns by
-  concatenation so its source doesn't either).
+  file contains a matchable success line — CI-enforced by the tracked-file
+  raw-byte scan in `tests/test_postprocess.py`, which walks every
+  git-tracked file's raw bytes against the compiled patterns on every run.
+  (This README deliberately does not quote the success strings; the
+  post-processor assembles its patterns by concatenation so its source
+  doesn't contain them either; and the fixture traces `\uXXXX`-escape one
+  character of each occurrence, so their raw bytes never match while the
+  decoded trace content the post-processor scans is unchanged.)
   **Completion-consistency gate**: if
   `verify_then_resolve` judged PASS while a pinned-grammar plugin command
   the agent itself executed shows no CLI success line in its result, the

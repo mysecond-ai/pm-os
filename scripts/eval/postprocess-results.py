@@ -52,7 +52,11 @@ What it enforces:
       echo-attack zero-credit, applied fail-closed because the wary judge
       composes the score and could be shown the forged bytes as "tool
       results". Reading honest repo files cannot trip this: no tracked
-      file contains a matchable success line (see the note at MKT_OK_RE).
+      file contains a matchable success line — enforced in CI by the
+      tracked-file raw-byte scan in tests/test_postprocess.py (fixture
+      traces \\uXXXX-escape one character of each success-line occurrence,
+      so raw bytes never match while decoded content is unchanged; see
+      the note at MKT_OK_RE).
 
    b. COMPLETION-CONSISTENCY GATE: if the completion judge
       (verify_then_resolve) PASSed while a pinned-grammar plugin command the
@@ -167,8 +171,9 @@ HARD_GATE_GRADER = "no_refusal"
 # matchable success line verbatim: scripts/ ships inside the staged
 # marketplace source, and the forged-evidence scan reads ALL tool results —
 # an honest wary agent Reading this script must not trip the gate. (The
-# docs deliberately never quote the success strings either; verified across
-# tracked files this round — keep it that way.)
+# docs deliberately never quote the success strings either, and fixture
+# traces \uXXXX-escape one character of each occurrence; the invariant is
+# CI-enforced by the tracked-file raw-byte scan in tests/test_postprocess.py.)
 _OK_PREFIX = "Successfully "
 MKT_OK_RE = re.compile(_OK_PREFIX + r"added marketplace: mysecond(?![\w.@-])")
 INST_OK_RE = re.compile(

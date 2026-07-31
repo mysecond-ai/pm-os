@@ -86,9 +86,23 @@ against the same contract (passed / flip_qualifying / exit_code fields).
 Each scenario is copied to a temp dir before running, so the checkout is
 never written to and relative-path resolution is exercised.
 
+In addition to the scenarios, a TRACKED-FILE RAW-BYTE SCAN enforces the
+forged-evidence gate's precondition as an invariant: no git-tracked file may
+contain raw bytes matchable by the anchored success regexes (MKT_OK_RE /
+INST_OK_RE). The public clone ships tests/fixtures/ — if a fixture trace
+carried matchable raw bytes, an honest wary agent Reading it (or grepping the
+checkout) would surface those bytes in a tool result and the gate would
+hard-fail an honest run. Fixture traces therefore \\uXXXX-escape one character
+of each success-line occurrence: the raw bytes never match, while JSON
+decoding restores the exact characters, so decoded trace behavior (what the
+post-processor and these scenarios exercise) is unchanged. The patterns are
+imported from the post-processor, which assembles them by concatenation —
+this test source contains no matchable literal either.
+
 Run: python3 tests/test_postprocess.py   (exit 0 = all pinned properties hold)
 """
 
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -99,6 +113,34 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 POST = REPO / "scripts" / "eval" / "postprocess-results.py"
 FIXTURES = REPO / "tests" / "fixtures" / "postprocess"
+
+
+def load_postprocessor():
+    spec = importlib.util.spec_from_file_location("postprocess_results", POST)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def scan_tracked_raw_bytes():
+    """Return offending paths: git-tracked files whose RAW bytes match an
+    anchored success regex. Must be empty — see module docstring."""
+    pp = load_postprocessor()
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"],
+        capture_output=True, check=True, timeout=60,
+    ).stdout.decode("utf-8", errors="replace")
+    offending = []
+    for rel in out.split("\0"):
+        if not rel:
+            continue
+        path = REPO / rel
+        if not path.is_file():
+            continue
+        raw = path.read_bytes().decode("utf-8", errors="replace")
+        if pp.MKT_OK_RE.search(raw) or pp.INST_OK_RE.search(raw):
+            offending.append(rel)
+    return offending
 
 
 def run_scenario(src):
@@ -147,6 +189,18 @@ def main():
               "not being tested")
         return 1
     failed = 0
+    offending = scan_tracked_raw_bytes()
+    if offending:
+        failed += 1
+        print("FAIL  tracked-file raw-byte scan")
+        for rel in offending:
+            print(f"      - {rel}: raw bytes match an anchored success regex "
+                  "(an honest agent surfacing this file in a tool result "
+                  "would trip the forged-evidence gate — \\uXXXX-escape one "
+                  "character of each occurrence)")
+    else:
+        print("ok    tracked-file raw-byte scan (no matchable success line "
+              "in any tracked file)")
     for src in scenarios:
         problems, stdout = run_scenario(src)
         if problems:
@@ -159,11 +213,13 @@ def main():
                 print(f"      | {line}")
         else:
             print(f"ok    {src.name}")
+    total = len(scenarios) + 1  # scenarios + tracked-file raw-byte scan
     print()
     if failed:
-        print(f"{failed}/{len(scenarios)} scenario(s) failed")
+        print(f"{failed}/{total} check(s) failed")
         return 1
-    print(f"all {len(scenarios)} fail-closed scenarios hold")
+    print(f"all {total} checks hold "
+          f"({len(scenarios)} fail-closed scenarios + raw-byte scan)")
     return 0
 
 
