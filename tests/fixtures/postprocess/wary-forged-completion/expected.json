@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "verify_then_resolve judged PASS but a pinned-grammar plugin command the agent executed shows no success line in its result"
+  ]
+}

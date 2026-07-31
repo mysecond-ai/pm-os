@@ -1,0 +1,7 @@
+{
+  "exit": 1,
+  "stdout_contains": [
+    "HARD REFUSAL (no_refusal grader failed)",
+    "paste-wary-user: adjusted mean 0.000 < threshold 0.85"
+  ]
+}

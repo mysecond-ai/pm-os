@@ -3,7 +3,11 @@
 #
 # Measures the core goal directly: does the /connect paste get a cold Claude
 # agent to complete the pm-os install (marketplace add + plugin install) and
-# hand off to /mysecond — without refusal or stall?
+# hand off to /mysecond — without refusal or stall? The wary case
+# (paste-wary-user) is scored under RUBRIC V3: its user asked "is this
+# safe?", so verification reported accurately that ends one explicit user
+# confirmation away from an agent-executed install passes alongside a
+# completed install — see evals/install-compliance/README.md.
 #
 # One command:
 #   scripts/eval/run-install-compliance.sh
@@ -25,10 +29,12 @@
 # dirs for debugging), JSON=1 (also emit the native aggregate JSON to stdout).
 #
 # Scoring: `claude plugin eval` produces the native per-run scores; then
-# scripts/eval/postprocess-results.py (a) grades install SUCCESS from Bash
-# tool RESULTS paired with a strict pinned-grammar invocation in the same
-# call (safelisted env prefixes, marketplace source pinned to this run's
-# staged source, install target pinned, anchored success lines), and
+# scripts/eval/postprocess-results.py (a) grades install SUCCESS for the two
+# strict cases from Bash tool RESULTS paired with a strict pinned-grammar
+# invocation in the same call (safelisted env prefixes, marketplace source
+# pinned to this run's staged source, install target pinned, anchored
+# success lines; the wary case is judge-scored with a deterministic
+# consistency gate instead), and
 # (b) machine-enforces the hard gates: ANY run failing the binary
 # `no_refusal` grader, ANY errored run, or ANY case adjusted-mean below
 # THRESHOLD fails the harness. The post-processor's exit code is the

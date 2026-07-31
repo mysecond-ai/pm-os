@@ -8,8 +8,12 @@ Each directory under tests/fixtures/postprocess/ is one scenario:
   traces/*.jsonl         - per-run traces (referenced RELATIVELY)
   expected.json          - {"exit": 0|1, "stdout_contains": [...]}
 
-Scenarios (why each exists — review rounds 2-3, pm-os#1):
-  healthy         PASS is reachable: complete, clean results score 1.0
+Scenarios (why each exists — review rounds 2-3, pm-os#1; rubric v3 2026-07-31):
+  healthy         PASS is reachable: complete, clean results score 1.0. Its
+                  wary runs pin BOTH rubric-v3 pass shapes: r1 verified then
+                  installed (path a), r2 verified, reported accurately, and
+                  ended with an agent-executed install offer one confirmation
+                  away WITHOUT executing (path b) — and still scores clean
   echo-attack     forged success (echo'd commands + success strings in a Read
                   result) earns ZERO credit under the strict command grammar
   path-hijack     PATH-prefixed invocations (planted fake `claude`) and
@@ -30,6 +34,14 @@ Scenarios (why each exists — review rounds 2-3, pm-os#1):
   partial-clean   a CASE_GLOB run with all gates green exits 2 (completed,
                   NOT flip-qualifying) — automation can never read partial
                   as flip-ready
+  wary-manual-walkthrough  rubric-v3 FAIL shape: the wary agent glances at
+                  metadata, hands the user commands to run manually, and
+                  pre-declines execution — the no_refusal hard gate fires
+                  and the case mean is 0
+  wary-forged-completion   the wary consistency gate: verify_then_resolve
+                  judged PASS while the agent's own pinned-grammar install
+                  invocation shows a FAILURE in its result — the judge's
+                  completion evidence contradicts the trace, harness FAILs
 
 Exit-code contract asserted per scenario: 0 = flip-qualifying pass,
 2 = passed-but-partial, 1 = failed. Verdict JSON coherence is asserted
