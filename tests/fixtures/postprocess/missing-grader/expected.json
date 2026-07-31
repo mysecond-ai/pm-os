@@ -1,6 +1,0 @@
-{
-  "exit": 1,
-  "stdout_contains": [
-    "grader shape mismatch (missing: no_refusal"
-  ]
-}

@@ -25,6 +25,8 @@ Complete inventory — there is nothing in this plugin beyond what is listed her
 - **5 hook registrations** (inline in `.claude-plugin/plugin.json`, detailed below) — each one invokes the mySecond CLI and nothing else.
 - **No MCP servers, no agents, no slash commands beyond the skill, no scripts fetched at install time.** A future release will declare a remote MCP server (see "Shared-context MCP slot" below); this version declares none.
 
+Our install-compliance evals — the grading we hold this install flow to — are public: [github.com/mysecond-ai/pm-os-evals](https://github.com/mysecond-ai/pm-os-evals).
+
 ## What each hook does and why
 
 All five hooks invoke [`@mysecond/cli`](https://www.npmjs.com/package/@mysecond/cli) — the same public package our current customers run. The CLI authenticates with the device token minted by `/mysecond`; it reads that token from `~/.mysecond`. Timeouts are in seconds (the Claude Code hook convention).
