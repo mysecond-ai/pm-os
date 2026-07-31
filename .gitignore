@@ -1,4 +1,6 @@
 .DS_Store
 node_modules/
+# evals moved to mysecond-ai/pm-os-evals; these keep leftover local results
+# and bytecode in old checkouts from ever being committed here.
 evals/results/
 __pycache__/

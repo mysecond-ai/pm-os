@@ -1,6 +1,0 @@
-{
-  "exit": 1,
-  "stdout_contains": [
-    "paste-wary-user run 1/1: native score invalid (1.5)"
-  ]
-}

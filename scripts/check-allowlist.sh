@@ -21,12 +21,11 @@
 #      account continuously; agents inspecting the plugin flagged exactly
 #      this). Bump with scripts/set-cli-pin.sh <version>.
 #      Documented exemptions (and the ONLY ones):
-#        - tests/fixtures/** — frozen historical bytes: real agent traces
-#          recorded against the pre-pin plugin genuinely contain @latest;
-#          rewriting recorded reality would falsify the fixtures.
 #        - scripts/check-allowlist.sh, scripts/set-cli-pin.sh — the
 #          enforcement tooling itself must be able to name the forbidden
 #          string.
+#      (The former tests/fixtures/** exemption left with the eval suite —
+#      now in github.com/mysecond-ai/pm-os-evals; no tests/ dir ships here.)
 #
 # Runs on tracked files (git ls-files) so it checks exactly what ships.
 
@@ -99,7 +98,6 @@ if [ -f .cli-pin ]; then
   fi
   while IFS= read -r f; do
     case "$f" in
-      tests/fixtures/*) continue ;;                      # frozen historical bytes
       scripts/check-allowlist.sh|scripts/set-cli-pin.sh) continue ;;  # enforcement tooling
     esac
     while IFS= read -r ref; do
