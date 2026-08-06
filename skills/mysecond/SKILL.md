@@ -29,7 +29,12 @@ if [ -f ~/.mysecond/credentials ]; then
 fi
 ```
 
-- HTTP 200 → read `email` and `team_slug` from `~/.mysecond/tmp/whoami.json` and report: "Connected to **<team_slug>** as <email>." Then stop — no login needed. Suggest `/welcome` if they haven't used it yet.
+- HTTP 200 → already connected. Read `email` and `team_slug` from `~/.mysecond/tmp/whoami.json` and report, in plain language:
+  > Connected to **<team_slug>** as <email>. Your workspace updates at the start of every session.
+
+  Add "Run `/welcome` to get started." if they haven't used it yet. Then stop — no login needed.
+
+  One exception: if the workspace content isn't on this machine yet (`.claude/skills` is empty or missing), run **Step 6** before you stop. That is the fix for "I'm connected but nothing showed up."
 - HTTP 401 → the stored token is dead. Continue to Step 1 (fresh login).
 - HTTP 403 with `"error":"subscription_required"` → say exactly: "Start your trial at https://app.mysecond.ai/activate — then run /mysecond again." (Use the `activate_url` field from the response if present.) Stop.
 - No credentials file → continue to Step 1.
@@ -118,7 +123,7 @@ rm -f ~/.mysecond/tmp/token.json ~/.mysecond/tmp/code.json
 
 If the write failed, say so and do not proceed; do not attempt to print the token as a fallback.
 
-## Step 5 — confirm with whoami and greet
+## Step 5 — confirm the connection with whoami
 
 ```bash
 BASE="${COMPANION_API_URL:-https://app.mysecond.ai}"
@@ -131,13 +136,57 @@ echo "$HTTP"; cat ~/.mysecond/tmp/whoami.json; rm -f ~/.mysecond/tmp/whoami.json
 
 (The whoami response contains no secrets — it's identity metadata: `email`, `team_id`, `user_id`, `scopes`, `team_slug`, `team_membership_role`, `is_invited_pm`, `workspace_scope`.)
 
-- 200 → greet the user by team: "Connected to **<team_slug>** ✓ as <email>. Your workspace will sync at the start of your next session — run `/welcome` to get started."
+- 200 → the login is complete. Go to Step 6 **before** you say anything to the user; the closing message lives there.
 - 401 → the token was rejected immediately after issue (clock skew or a revocation). Delete `~/.mysecond/credentials` and restart from Step 1; if it happens twice, tell the user to contact support@mysecond.ai.
 - 403 `subscription_required` → "Start your trial at https://app.mysecond.ai/activate — then run /mysecond again." (prefer the response's `activate_url`).
 - 400/403 `no_team` (defensive — normally surfaces in the browser, not here) → "Your account isn't part of a workspace yet — finish signup at https://app.mysecond.ai (or accept your team's invite email), then run /mysecond again."
 
+## Step 6 — pull the workspace, then report
+
+Claude Code builds its skill list when a session starts, so content that lands
+mid-session isn't usable until a restart. Pull it now anyway: that way the user
+restarts once and everything is there, instead of restarting, waiting for the
+session-start sync, and restarting again.
+
+Run this from the project directory, and give the call a 300-second timeout —
+the fallback downloads the CLI the first time.
+
+```bash
+# Same resolution the plugin's hooks use: CLI on PATH first, pinned npx second.
+# No --silent here: --silent caps the sync request at 8 seconds for
+# session-start fast-fail, and this first pull is the biggest one there is.
+mysecond sync 2>&1 || npx -y @mysecond/cli@1.12.0 sync 2>&1 || true
+# `sync` writes .claude/sync-state.json only after the server responds, so a
+# fresh timestamp on it is the signal that content actually landed.
+if [ -n "$(find .claude/sync-state.json -mmin -5 2>/dev/null)" ]; then
+  echo "WORKSPACE=synced"
+else
+  echo "WORKSPACE=not-synced"
+fi
+```
+
+This step is best-effort. The login already succeeded — the credential is stored
+and Step 5 confirmed it. Never report the login as failed because this step
+failed, and never restart the login because of it.
+
+Then report. Keep the closing message to these two lines (the sync log itself
+stays out of it; walk through it if the user asks):
+
+**WORKSPACE=synced:**
+
+> Connected to **<team_slug>** as <email>.
+> Your skills and shared context are on this machine. Restart Claude Code to load them, then run `/welcome`.
+
+**WORKSPACE=not-synced** (the sync didn't finish — say so):
+
+> Connected to **<team_slug>** as <email>.
+> The workspace download didn't finish. Claude Code runs it again at the next session start — restart, then run `/welcome`; if it isn't there yet, restart once more.
+
+Leave scopes, file permissions, HTTP status codes, and token mechanics out of
+this message. Answer any of it if the user asks — see Notes.
+
 ## Notes
 
 - The `interval` and `retry_after_seconds` values come from the server — honor them; do not poll faster.
-- This flow is safe to re-run at any time; re-running replaces the stored credential.
-- The credential is a 90-day device token that renews on use. If sync ever starts failing with 401s months later, `/mysecond` again is the fix.
+- Re-running this flow at any time replaces the stored credential with a fresh one. That is the fix when sync starts reporting that this machine isn't authenticated.
+- Token lifetime, if the user asks: the device token expires 90 days after the last time this machine checked in with `whoami`. Every `/mysecond` run checks in (Step 0 and Step 5) and rolls the window forward another 90 days; ordinary syncs don't. So someone who reconnects, or runs `/mysecond` to check status, keeps the same credential indefinitely — and if it does lapse, `/mysecond` issues a new one.
