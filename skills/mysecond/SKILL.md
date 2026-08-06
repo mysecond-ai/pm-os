@@ -30,7 +30,7 @@ fi
 ```
 
 - HTTP 200 → already connected. Read `email` and `team_slug` from `~/.mysecond/tmp/whoami.json` and report, in plain language:
-  > Connected to **<team_slug>** as <email>. Your workspace updates at the start of every session.
+  > Connected to **<team_slug>** as <email>. Claude Code checks for workspace updates at the start of each session.
 
   Add "Run `/welcome` to get started." if they haven't used it yet. Then stop — no login needed.
 
@@ -156,9 +156,15 @@ the fallback downloads the CLI the first time.
 # No --silent here: --silent caps the sync request at 8 seconds for
 # session-start fast-fail, and this first pull is the biggest one there is.
 mysecond sync 2>&1 || npx -y @mysecond/cli@1.12.0 sync 2>&1 || true
-# `sync` writes .claude/sync-state.json only after the server responds, so a
-# fresh timestamp on it is the signal that content actually landed.
-if [ -n "$(find .claude/sync-state.json -mmin -5 2>/dev/null)" ]; then
+# Signal that content is on disk: `.claude/skills` is non-empty — the same
+# check Step 0 uses, and directly true (every workspace pull lands skills
+# there). Deliberately NOT a timestamp on .claude/sync-state.json: `push`
+# writes that file too, so a fresh mtime can belong to an earlier turn's
+# push rather than to this pull. This path is relative to the current
+# directory, which is why Step 6 runs from the project directory: the sync
+# writes under $CLAUDE_PROJECT_DIR when that is set, and reading the check
+# from anywhere else reports not-synced.
+if [ -n "$(ls -A .claude/skills 2>/dev/null)" ]; then
   echo "WORKSPACE=synced"
 else
   echo "WORKSPACE=not-synced"
@@ -177,10 +183,10 @@ stays out of it; walk through it if the user asks):
 > Connected to **<team_slug>** as <email>.
 > Your skills and shared context are on this machine. Restart Claude Code to load them, then run `/welcome`.
 
-**WORKSPACE=not-synced** (the sync didn't finish — say so):
+**WORKSPACE=not-synced** (the content isn't on disk — say so):
 
 > Connected to **<team_slug>** as <email>.
-> The workspace download didn't finish. Claude Code runs it again at the next session start — restart, then run `/welcome`; if it isn't there yet, restart once more.
+> The workspace download didn't finish. Claude Code tries again at the next session start — restart, then run `/welcome`; if it isn't there yet, restart once more.
 
 Leave scopes, file permissions, HTTP status codes, and token mechanics out of
 this message. Answer any of it if the user asks — see Notes.
@@ -188,5 +194,5 @@ this message. Answer any of it if the user asks — see Notes.
 ## Notes
 
 - The `interval` and `retry_after_seconds` values come from the server — honor them; do not poll faster.
-- Re-running this flow at any time replaces the stored credential with a fresh one. That is the fix when sync starts reporting that this machine isn't authenticated.
-- Token lifetime, if the user asks: the device token expires 90 days after the last time this machine checked in with `whoami`. Every `/mysecond` run checks in (Step 0 and Step 5) and rolls the window forward another 90 days; ordinary syncs don't. So someone who reconnects, or runs `/mysecond` to check status, keeps the same credential indefinitely — and if it does lapse, `/mysecond` issues a new one.
+- Re-running this flow is the fix when sync starts reporting that this machine isn't authenticated: Step 0 tests the stored credential, and when the server rejects it the flow mints and stores a fresh one in its place. (When the stored credential still works, Step 0 reports status and stops — the credential is unchanged.)
+- Token lifetime, if the user asks: it's a 90-day device token, and the 90 days start over each time you run `/mysecond` or the plugin records a usage event. If it does lapse, the next `/mysecond` run issues a new one.
