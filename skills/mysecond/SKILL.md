@@ -155,16 +155,23 @@ the fallback downloads the CLI the first time.
 # Same resolution the plugin's hooks use: CLI on PATH first, pinned npx second.
 # No --silent here: --silent caps the sync request at 8 seconds for
 # session-start fast-fail, and this first pull is the biggest one there is.
-mysecond sync 2>&1 || npx -y @mysecond/cli@1.12.0 sync 2>&1 || true
-# Signal that content is on disk: `.claude/skills` is non-empty — the same
-# check Step 0 uses, and directly true (every workspace pull lands skills
-# there). Deliberately NOT a timestamp on .claude/sync-state.json: `push`
-# writes that file too, so a fresh mtime can belong to an earlier turn's
-# push rather than to this pull. This path is relative to the current
-# directory, which is why Step 6 runs from the project directory: the sync
-# writes under $CLAUDE_PROJECT_DIR when that is set, and reading the check
-# from anywhere else reports not-synced.
-if [ -n "$(ls -A .claude/skills 2>/dev/null)" ]; then
+if mysecond sync 2>&1 || npx -y @mysecond/cli@1.12.0 sync 2>&1; then
+  PULL_OK=1
+else
+  PULL_OK=0
+fi
+# Synced means BOTH: this pull exited 0 AND `.claude/skills` is non-empty
+# (the same on-disk check Step 0 uses; every workspace pull lands skills
+# there). Neither alone is the claim we make: a repo can carry its own
+# committed .claude/skills, so non-empty without a clean pull would call
+# a failed download synced. Deliberately NOT a timestamp on
+# .claude/sync-state.json: `push` writes that file too, so a fresh mtime
+# can belong to an earlier turn's push rather than to this pull. The path
+# is relative to the current directory, which is why Step 6 runs from the
+# project directory: the sync writes under $CLAUDE_PROJECT_DIR when that
+# is set, and a check read from a different directory answers for the
+# wrong directory — in either direction.
+if [ "$PULL_OK" = 1 ] && [ -n "$(ls -A .claude/skills 2>/dev/null)" ]; then
   echo "WORKSPACE=synced"
 else
   echo "WORKSPACE=not-synced"
@@ -195,4 +202,4 @@ this message. Answer any of it if the user asks — see Notes.
 
 - The `interval` and `retry_after_seconds` values come from the server — honor them; do not poll faster.
 - Re-running this flow is the fix when sync starts reporting that this machine isn't authenticated: Step 0 tests the stored credential, and when the server rejects it the flow mints and stores a fresh one in its place. (When the stored credential still works, Step 0 reports status and stops — the credential is unchanged.)
-- Token lifetime, if the user asks: it's a 90-day device token, and the 90 days start over each time you run `/mysecond` or the plugin records a usage event. If it does lapse, the next `/mysecond` run issues a new one.
+- Token lifetime, if the user asks: it's a 90-day device token, and the 90 days start over each time you run `/mysecond`. If it does lapse, the next `/mysecond` run issues a new one.
