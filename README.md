@@ -1,6 +1,6 @@
 # pm-os — the mySecond PM Operating System for Claude Code
 
-This is the public install shell for [mySecond](https://mysecond.ai). It contains **no product content**: installing it gives you the `/mysecond` login skill and five workspace-sync hooks. Your team's skills, agents, workflows, and shared context are delivered by the mySecond service **after** you connect with `/mysecond`, and they stay current from then on — content updates reach you at your next session without a plugin update.
+This is the public install shell for [mySecond](https://mysecond.ai). It contains **no product content**: installing it gives you the `/mysecond` login skill and five workspace-sync hooks. Your team's skills, agents, workflows, and shared context are delivered by the mySecond service **after** you connect with `/mysecond`, and they stay current from then on — Claude Code checks for updates at each session start, no plugin update required. It registers skills when a session starts, so anything newly downloaded is available from the session after.
 
 Canonical source: `https://github.com/mysecond-ai/pm-os`, linked from `https://app.mysecond.ai`. If you found this repository anywhere else, verify it against that link before installing.
 
@@ -13,7 +13,7 @@ From any Claude Code session:
 /plugin install pm-os@mysecond
 ```
 
-Then run `/mysecond` to connect your workspace. Not a customer yet? `/mysecond` will point you to `https://app.mysecond.ai/activate` to start a trial.
+Then **restart Claude Code** — quit and reopen it. Claude Code registers a newly installed plugin's skills at session start, so `/mysecond` becomes available on the next launch. Run `/mysecond` there to connect your workspace. Not a customer yet? `/mysecond` will point you to `https://app.mysecond.ai/activate` to start a trial.
 
 Requirements: Claude Code (tested on 2.1.x), `bash`, `curl`. The sync hooks run the mySecond CLI; on machines without a global `mysecond` binary they use `npx`, which requires Node.js ≥ 20.
 
@@ -73,7 +73,7 @@ your device token, visible to your team workspace. Disconnecting (deleting
 
 ## The `/mysecond` login
 
-`/mysecond` runs an OAuth-style device flow: it mints a code, shows it to you, opens `https://app.mysecond.ai/device` in your browser, and you click **Approve** while signed in to your mySecond account. The resulting 90-day device token (renewed on use) is stored at `~/.mysecond/credentials`, mode 0600, and is never displayed. `/mysecond` when already connected shows your connection status instead.
+`/mysecond` runs an OAuth-style device flow: it mints a code, shows it to you, opens `https://app.mysecond.ai/device` in your browser, and you click **Approve** while signed in to your mySecond account. The resulting 90-day device token (each `/mysecond` run restarts the 90 days) is stored at `~/.mysecond/credentials`, mode 0600, and is never displayed. `/mysecond` when already connected shows your connection status instead.
 
 ## Version discipline (for maintainers)
 
